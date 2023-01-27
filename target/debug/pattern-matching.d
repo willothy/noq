@@ -1,1 +1,1 @@
-/home/will/Projects/pattern-matching/target/debug/pattern-matching: /home/will/Projects/pattern-matching/src/main.rs
+/home/will/Projects/pattern-matching/target/debug/pattern-matching: /home/will/Projects/pattern-matching/src/bindings.rs /home/will/Projects/pattern-matching/src/lexer.rs /home/will/Projects/pattern-matching/src/main.rs /home/will/Projects/pattern-matching/src/rule.rs /home/will/Projects/pattern-matching/src/tests.rs
