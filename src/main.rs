@@ -1,3 +1,7 @@
+#![feature(box_syntax)]
+
+use std::process::ExitCode;
+
 mod bindings;
 mod lexer;
 mod repl;
@@ -72,6 +76,7 @@ macro_rules! rule {
     };
 }
 
-fn main() {
+fn main() -> ExitCode {
     repl::Repl::run();
+    ExitCode::SUCCESS
 }

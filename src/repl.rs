@@ -7,6 +7,7 @@ use crossterm::{
     style::Print,
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
+use thiserror::Error;
 
 use crate::{
     lexer::Lexer,
@@ -29,7 +30,11 @@ struct ReplState {
     quit: bool,
 }
 
-type ReplResult = Result<Option<String>, String>;
+#[derive(Debug, Error)]
+#[error("Error: {0}")]
+struct ReplError(String);
+
+type ReplResult = anyhow::Result<Option<String>>;
 
 impl Repl {
     pub fn run() {
@@ -62,16 +67,16 @@ impl Repl {
                 Some(format!("No shape defined"))
             });
         }
-        let shape = Expr::parse(Lexer::from(&*rest));
+        let shape = Expr::parse(Lexer::from(&*rest))?;
         self.state.shape = Some(shape.clone());
         Ok(Some(format!("{}", shape)))
     }
 
     fn rule(&mut self, rest: String) -> ReplResult {
         let Some(name) = rest.trim().split_whitespace().next() else {
-            return Err("Expected rule name and rule".to_string());
+            return Err(ReplError("Expected rule name and rule".into()).into());
         };
-        let rule = Rule::parse(Lexer::from(&rest[name.len()..]));
+        let rule = Rule::parse(Lexer::from(&rest[name.len()..]))?;
         let res = format!("Added rule {}: {}", name, rule);
         self.state.rules.insert(name.to_owned(), rule);
         Ok(Some(res))
@@ -79,20 +84,20 @@ impl Repl {
 
     fn apply(&mut self, rest: String) -> ReplResult {
         let Some(rule_name) = rest.trim().split_whitespace().next() else {
-            return Err("Expected rule name and rule".to_string());
+            return Err(ReplError("Expected rule name and rule".into()).into());
         };
         let rule = if rule_name.trim() == "rule" {
-            Rule::parse(Lexer::from(&rest[rule_name.len()..]))
+            Rule::parse(Lexer::from(&rest[rule_name.len()..]))?
         } else {
             let Some(rule) = self.state.rules.get(rule_name) else {
-                return Err(format!("Unknown rule {}", rule_name));
+                return Err(ReplError(format!("Unknown rule {}", rule_name)).into());
             };
             rule.clone()
         };
 
         let new_shape = rule.apply_all({
             let Some(shape) = &self.state.shape else {
-                return Err(format!("No shape defined"));
+                return Err(ReplError("No shape defined".into()).into());
             };
             shape
         })?;
@@ -110,6 +115,7 @@ impl Repl {
         while !self.state.quit {
             // Use crossterm to print the latest <terminal height>
             let term_height = crossterm::terminal::size().unwrap().1;
+            execute!(stdout, Clear(ClearType::All)).unwrap();
             self.lines
                 .iter()
                 .rev()
@@ -120,7 +126,6 @@ impl Repl {
                         stdout,
                         cursor::Hide,
                         cursor::MoveTo(0, term_height - 3 - idx as u16),
-                        Clear(ClearType::CurrentLine),
                         Print(line)
                     )
                     .unwrap();
@@ -128,7 +133,6 @@ impl Repl {
             execute!(
                 stdout,
                 cursor::MoveTo(0, term_height - 1),
-                Clear(ClearType::CurrentLine),
                 Print(&(self.prompt.clone() + &self.input_buf)),
                 MoveToColumn(self.prompt.len() as u16 + self.insert as u16),
                 cursor::Show
@@ -250,7 +254,11 @@ impl Repl {
                     $(
                         stringify!($name) $($(| stringify!($alias))+)? => self.$name(args),
                     )+
-                    unknown => Err(format!("Unknown command {}. Expected one of {}.", unknown, stringify!($($name$(($($alias),+))?),+))),
+                    unknown => Err(
+                        ReplError(
+                            format!("Unknown command {}. Expected one of {}.", unknown, stringify!($($name$(($($alias),+))?),+))
+                        ).into()
+                    ),
                 }
             }
         }

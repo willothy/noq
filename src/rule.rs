@@ -1,5 +1,8 @@
 use std::{fmt::Display, iter::Peekable};
 
+use anyhow::{bail, Result};
+use thiserror::Error;
+
 use crate::{
     bindings::{pattern_match, substitute_bindings},
     lexer::{Token, TokenKind},
@@ -12,24 +15,25 @@ pub(crate) struct Rule {
 }
 
 impl Rule {
-    pub fn parse(lexer: impl Iterator<Item = Token>) -> Self {
+    pub fn parse(lexer: impl Iterator<Item = Token>) -> Result<Self> {
         let mut lexer = lexer.peekable();
-        let head = Expr::parse_peekable(&mut lexer);
+        let head = Expr::parse_peekable(&mut lexer)?;
         lexer.next_if(|t| t.kind == TokenKind::Equals).unwrap();
-        let body = Expr::parse_peekable(&mut lexer);
-        Self { head, body }
+        let body = Expr::parse_peekable(&mut lexer)?;
+        Ok(Self { head, body })
     }
 }
 
 impl Rule {
-    pub fn apply_all(&self, expr: &Expr) -> Result<Expr, String> {
+    pub fn apply_all(&self, expr: &Expr) -> Result<Expr> {
         Ok(if let Some(bindings) = pattern_match(&self.head, expr) {
             substitute_bindings(&bindings, &self.body)?
         } else {
+            use Expr::*;
             match expr {
-                Expr::Sym(_) => expr.clone(),
-                Expr::Fun(name, args) => Expr::Fun(
-                    name.clone(),
+                Sym(_) | Var(_) => expr.clone(),
+                Fun(head, args) => Expr::Fun(
+                    box self.apply_all(head)?,
                     args.iter()
                         .map(|arg| self.apply_all(arg))
                         .collect::<Result<_, _>>()?,
@@ -48,55 +52,70 @@ impl Display for Rule {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
     Sym(String),
-    Fun(String, Vec<Expr>),
+    Var(String),
+    Fun(Box<Expr>, Vec<Expr>),
 }
 
+#[derive(Debug, Error)]
+#[error("Parse error: {0}")]
+pub struct ParseError(String);
+
 impl Expr {
-    fn parse_peekable(lexer: &mut Peekable<impl Iterator<Item = Token>>) -> Self {
+    fn var_or_sym(name: &str) -> Result<Expr> {
+        if name.is_empty() {
+            bail!("Empty symbol name")
+        }
+        Ok(name
+            .chars()
+            .nth(0)
+            .filter(|c| c.is_uppercase())
+            .map(|_| Expr::Var(name.to_owned()))
+            .unwrap_or(Expr::Sym(name.to_owned())))
+    }
+
+    fn parse_peekable(lexer: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Self> {
         if let Some(name) = lexer.next() {
             if let TokenKind::Sym = name.kind {
                 if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::OpenParen) {
                     let mut args = Vec::new();
-                    if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::CloseParen) {
-                        return Expr::Fun(name.text, args);
+                    if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_some() {
+                        return Ok(Expr::Fun(box Self::var_or_sym(&name.text)?, args));
                     }
-                    args.push(Self::parse_peekable(lexer));
-                    while let Some(_) = lexer.next_if(|t| t.kind == TokenKind::Comma) {
-                        args.push(Self::parse_peekable(lexer));
+                    args.push(Self::parse_peekable(lexer)?);
+                    while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+                        args.push(Self::parse_peekable(lexer)?);
                     }
                     if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                        todo!("Expected close paren");
+                        return Err(ParseError("Expected ')'".to_string()).into());
                     }
-                    Expr::Fun(name.text, args)
+                    Ok(Expr::Fun(box Self::var_or_sym(&name.text)?, args))
                 } else {
-                    Expr::Sym(name.text)
+                    Self::var_or_sym(&name.text)
                 }
             } else {
-                todo!("Expected symbol")
+                return Err(ParseError("Expected symbol".to_string()).into());
             }
         } else {
-            todo!("EOF Error")
+            return Err(ParseError("Expected symbol, found EOF".to_string()).into());
         }
     }
 
-    pub fn parse(lexer: impl Iterator<Item = Token>) -> Self {
+    pub fn parse(lexer: impl Iterator<Item = Token>) -> Result<Self> {
         Self::parse_peekable(&mut lexer.peekable())
     }
 }
 
-impl<T> From<T> for Expr
-where
-    T: Into<String>,
-{
-    fn from(s: T) -> Self {
-        Expr::parse(crate::lexer::Lexer::from_iter(s.into().chars()))
+impl TryFrom<&str> for Expr {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self> {
+        Expr::parse(crate::lexer::Lexer::from_iter(s.chars()))
     }
 }
 
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Expr::Sym(name) => write!(f, "{}", name),
+            Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
             Expr::Fun(name, args) => {
                 write!(f, "{}(", name)?;
                 for (idx, arg) in args.iter().enumerate() {
