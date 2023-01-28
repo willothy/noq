@@ -20,7 +20,7 @@ pub struct Repl {
     history: Vec<String>,
     history_index: usize,
     state: ReplState,
-    input_idx: usize,
+    insert: usize,
 }
 
 struct ReplState {
@@ -36,7 +36,7 @@ impl Repl {
         let mut repl = Repl {
             prompt: "> ".to_string(),
             input_buf: String::new(),
-            input_idx: 0,
+            insert: 0,
             lines: Vec::new(),
             history: Vec::new(),
             history_index: 0,
@@ -81,15 +81,22 @@ impl Repl {
         let Some(rule_name) = rest.trim().split_whitespace().next() else {
             return Err("Expected rule name and rule".to_string());
         };
-        let Some(rule) = self.state.rules.get(rule_name) else {
-            return Err(format!("Unknown rule {}", rule_name));
+        let rule = if rule_name.trim() == "rule" {
+            Rule::parse(Lexer::from(&rest[rule_name.len()..]))
+        } else {
+            let Some(rule) = self.state.rules.get(rule_name) else {
+                return Err(format!("Unknown rule {}", rule_name));
+            };
+            rule.clone()
         };
+
         let new_shape = rule.apply_all({
             let Some(shape) = &self.state.shape else {
                 return Err(format!("No shape defined"));
             };
             shape
         })?;
+
         let new_shape_str = format!("{}", new_shape);
         self.state.shape = Some(new_shape);
         Ok(Some(new_shape_str))
@@ -123,7 +130,7 @@ impl Repl {
                 cursor::MoveTo(0, term_height - 1),
                 Clear(ClearType::CurrentLine),
                 Print(&(self.prompt.clone() + &self.input_buf)),
-                MoveToColumn(self.prompt.len() as u16 + self.input_idx as u16),
+                MoveToColumn(self.prompt.len() as u16 + self.insert as u16),
                 cursor::Show
             )
             .unwrap();
@@ -162,13 +169,11 @@ impl Repl {
                     ..
                 }) => match code {
                     KeyCode::Left => {
-                        self.input_idx
-                            .checked_sub(1)
-                            .map(|idx| self.input_idx = idx);
+                        self.insert.checked_sub(1).map(|idx| self.insert = idx);
                     }
                     KeyCode::Right => {
-                        if self.input_idx < self.input_buf.len() {
-                            self.input_idx += 1;
+                        if self.insert < self.input_buf.len() {
+                            self.insert += 1;
                         }
                     }
                     _ => (),
@@ -177,26 +182,24 @@ impl Repl {
                     code: crossterm::event::KeyCode::Char(c),
                     ..
                 }) => {
-                    if self.input_idx == self.input_buf.len() {
+                    if self.insert == self.input_buf.len() {
                         self.input_buf.push(c);
                     } else {
-                        self.input_buf.insert(self.input_idx, c);
+                        self.input_buf.insert(self.insert, c);
                     }
-                    self.input_idx += 1;
+                    self.insert += 1;
                 }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Backspace,
                     ..
                 }) => {
-                    if self.input_idx == self.input_buf.len() {
+                    if self.insert == self.input_buf.len() {
                         self.input_buf.pop();
                     } else {
                         self.input_buf
-                            .remove(self.input_idx.checked_sub(1).unwrap_or(0));
+                            .remove(self.insert.checked_sub(1).unwrap_or(0));
                     }
-                    self.input_idx
-                        .checked_sub(1)
-                        .map(|idx| self.input_idx = idx);
+                    self.insert.checked_sub(1).map(|idx| self.insert = idx);
                 }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Enter,
@@ -211,12 +214,12 @@ impl Repl {
                         Ok(None) => (),
                         Err(err) => self.lines.push(format!("  => Error: {}", err)),
                     }
-                    self.input_idx = 0;
+                    self.insert = 0;
                 }
                 _ => {}
             }
         }
-        execute!(stdout, cursor::MoveDown(1), MoveToColumn(0), Print("")).unwrap();
+        execute!(stdout, cursor::MoveDown(2), MoveToColumn(0), Print("")).unwrap();
         disable_raw_mode().unwrap();
     }
 
