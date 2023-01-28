@@ -22,18 +22,20 @@ impl Rule {
 }
 
 impl Rule {
-    pub fn apply_all(&self, expr: &Expr) -> Expr {
-        if let Some(bindings) = pattern_match(&self.head, expr) {
-            substitute_bindings(&bindings, &self.body)
+    pub fn apply_all(&self, expr: &Expr) -> Result<Expr, String> {
+        Ok(if let Some(bindings) = pattern_match(&self.head, expr) {
+            substitute_bindings(&bindings, &self.body)?
         } else {
             match expr {
                 Expr::Sym(_) => expr.clone(),
                 Expr::Fun(name, args) => Expr::Fun(
                     name.clone(),
-                    args.iter().map(|arg| self.apply_all(arg)).collect(),
+                    args.iter()
+                        .map(|arg| self.apply_all(arg))
+                        .collect::<Result<_, _>>()?,
                 ),
             }
-        }
+        })
     }
 }
 

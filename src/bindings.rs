@@ -4,23 +4,23 @@ use crate::rule::Expr;
 
 pub(crate) type Bindings = HashMap<String, Expr>;
 
-pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
-    match expr {
+pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Result<Expr, String> {
+    Ok(match expr {
         Expr::Sym(name) => bindings.get(name).unwrap_or(expr).clone(),
         Expr::Fun(name, args) => {
             let new_name = match bindings.get(name) {
                 Some(Expr::Sym(new_name)) => new_name.clone(),
                 None => name.clone(),
-                _ => panic!(),
+                _ => return Err("Invalid substitution".into()),
             };
             Expr::Fun(
                 new_name,
                 args.iter()
                     .map(|arg| substitute_bindings(bindings, arg))
-                    .collect(),
+                    .collect::<Result<Vec<_>, String>>()?,
             )
         }
-    }
+    })
 }
 
 pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {

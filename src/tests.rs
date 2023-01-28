@@ -14,7 +14,7 @@ fn rule_apply_all() {
 
     let expected = expr!(foo(pair(g(b), f(a)), pair(z(d), q(c))));
 
-    let actual = swap.apply_all(&input);
+    let actual = swap.apply_all(&input).unwrap();
 
     assert_eq!(actual, expected);
 }

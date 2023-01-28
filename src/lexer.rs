@@ -61,7 +61,7 @@ where
                 '=' => Some(Token::new(Equals, text)),
                 _ => {
                     if !c.is_alphanumeric() {
-                        panic!("Unexpected token: {}", c);
+                        return None;
                     }
 
                     while let Some(c) = self.chars.next_if(|x| x.is_alphanumeric()) {
