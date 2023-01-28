@@ -43,6 +43,13 @@ impl Rule {
     }
 }
 
+impl TryFrom<&str> for Rule {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self> {
+        Rule::parse(crate::lexer::Lexer::from_iter(s.chars()))
+    }
+}
+
 impl Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{} = {}", self.head, self.body)

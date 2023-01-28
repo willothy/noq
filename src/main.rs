@@ -8,7 +8,7 @@ mod repl;
 mod rule;
 mod tests;
 
-#[macro_export]
+/* #[macro_export]
 macro_rules! fun_args {
     () => {
         vec![]
@@ -74,7 +74,7 @@ macro_rules! rule {
             body: expr!($body($($body_args)*)),
         }
     };
-}
+} */
 
 fn main() -> ExitCode {
     repl::Repl::run();
