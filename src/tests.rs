@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use crate::bindings::*;
 use crate::rule::Expr;
-use crate::rule::Rule;
 use crate::*;
 
 #[test]

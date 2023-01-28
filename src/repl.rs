@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    io::{stdin, stdout, Write},
-};
+use std::{collections::HashMap, io::stdout};
 
 use crossterm::{
     cursor::{self, MoveToColumn},

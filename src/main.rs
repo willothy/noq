@@ -1,14 +1,3 @@
-use std::{
-    collections::HashMap,
-    io::{stdin, stdout, Write},
-};
-
-use crossterm::terminal::enable_raw_mode;
-
-use crate::{lexer::Lexer, rule::Expr};
-
-use self::rule::Rule;
-
 mod bindings;
 mod lexer;
 mod repl;
