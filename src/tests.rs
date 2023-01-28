@@ -8,10 +8,7 @@ use crate::*;
 
 #[test]
 fn rule_apply_all() {
-    let swap = Rule {
-        head: expr!(swap(pair(a, b))),
-        body: expr!(pair(b, a)),
-    };
+    let swap = rule!(swap(pair(a, b)) = pair(b, a));
 
     let input = expr!(foo(swap(pair(f(a), g(b))), swap(pair(q(c), z(d)))));
 
@@ -24,15 +21,11 @@ fn rule_apply_all() {
 
 #[test]
 fn matching() {
-    let swap = Rule {
-        head: expr!(swap(pair(a, b))),
-        body: expr!(pair(b, a)),
-    };
+    let swap = rule!(swap(pair(a, b)) = pair(b, a));
 
-    // Pattern: swap(pair(a, b))
     let pattern = swap.head.clone();
-    // swap(pair(f(c), g(d)))
     let value = expr!(swap(pair(f(c), g(d))));
+
     let expected: HashMap<&str, Expr> =
         HashMap::from_iter(vec![("a", expr!(f(c))), ("b", expr!(g(d)))]);
 

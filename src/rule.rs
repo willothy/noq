@@ -12,6 +12,16 @@ pub(crate) struct Rule {
 }
 
 impl Rule {
+    pub fn parse(lexer: impl Iterator<Item = Token>) -> Self {
+        let mut lexer = lexer.peekable();
+        let head = Expr::parse_peekable(&mut lexer);
+        lexer.next_if(|t| t.kind == TokenKind::Equals).unwrap();
+        let body = Expr::parse_peekable(&mut lexer);
+        Self { head, body }
+    }
+}
+
+impl Rule {
     pub fn apply_all(&self, expr: &Expr) -> Expr {
         if let Some(bindings) = pattern_match(&self.head, expr) {
             substitute_bindings(&bindings, &self.body)
@@ -44,7 +54,18 @@ impl Expr {
         if let Some(name) = lexer.next() {
             if let TokenKind::Sym = name.kind {
                 if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::OpenParen) {
-                    todo!("args")
+                    let mut args = Vec::new();
+                    if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::CloseParen) {
+                        return Expr::Fun(name.text, args);
+                    }
+                    args.push(Self::parse_peekable(lexer));
+                    while let Some(_) = lexer.next_if(|t| t.kind == TokenKind::Comma) {
+                        args.push(Self::parse_peekable(lexer));
+                    }
+                    if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
+                        todo!("Expected close paren");
+                    }
+                    Expr::Fun(name.text, args)
                 } else {
                     Expr::Sym(name.text)
                 }
@@ -58,6 +79,15 @@ impl Expr {
 
     pub fn parse(lexer: impl Iterator<Item = Token>) -> Self {
         Self::parse_peekable(&mut lexer.peekable())
+    }
+}
+
+impl<T> From<T> for Expr
+where
+    T: Into<String>,
+{
+    fn from(s: T) -> Self {
+        Expr::parse(crate::lexer::Lexer::from_iter(s.into().chars()))
     }
 }
 
