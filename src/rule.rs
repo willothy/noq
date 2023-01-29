@@ -20,6 +20,15 @@ impl Rule {
         let head = Expr::parse_peekable(&mut lexer)?;
         lexer.next_if(|t| t.kind == TokenKind::Equals).unwrap();
         let body = Expr::parse_peekable(&mut lexer)?;
+        match lexer.peek() {
+            Some(t) => match t.kind {
+                TokenKind::Semicolon => {
+                    lexer.next();
+                }
+                _ => bail!("Expected semicolon, got {:?}", t),
+            },
+            None => {}
+        };
         Ok(Self { head, body })
     }
 }
@@ -46,7 +55,7 @@ impl Rule {
 impl TryFrom<&str> for Rule {
     type Error = anyhow::Error;
     fn try_from(s: &str) -> Result<Self> {
-        Rule::parse(crate::lexer::Lexer::from_iter(s.chars()))
+        Rule::parse(crate::lexer::Lexer::from_iter(s.chars().peekable()))
     }
 }
 
@@ -82,7 +91,11 @@ impl Expr {
 
     fn parse_peekable(lexer: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Self> {
         if let Some(name) = lexer.next() {
-            if let TokenKind::Sym = name.kind {
+            if let Token {
+                kind: TokenKind::Sym,
+                ..
+            } = &name
+            {
                 if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::OpenParen) {
                     let mut args = Vec::new();
                     if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_some() {
@@ -100,7 +113,11 @@ impl Expr {
                     Self::var_or_sym(&name.text)
                 }
             } else {
-                return Err(ParseError("Expected symbol".to_string()).into());
+                return Err(ParseError(format!(
+                    "Expected symbol, found {:?}",
+                    lexer.peek().unwrap()
+                ))
+                .into());
             }
         } else {
             return Err(ParseError("Expected symbol, found EOF".to_string()).into());
@@ -115,7 +132,7 @@ impl Expr {
 impl TryFrom<&str> for Expr {
     type Error = anyhow::Error;
     fn try_from(s: &str) -> Result<Self> {
-        Expr::parse(crate::lexer::Lexer::from_iter(s.chars()))
+        Expr::parse(crate::lexer::Lexer::from_iter(s.chars().peekable()))
     }
 }
 

@@ -1,18 +1,20 @@
-use std::iter::Peekable;
+use std::{iter::Peekable, str::Chars};
 
-#[derive(Debug, PartialEq)]
-pub enum TokenKind {
+crate::token_kinds! {
     Sym,
-    OpenParen,
-    CloseParen,
-    Comma,
-    Equals,
-
-    // Keywords
-    Done,
-    Shape,
-    Rule,
-    Apply,
+    OpenParen = "(",
+    CloseParen = ")",
+    Comma = ",",
+    Equals = "=",
+    Semicolon = ";",
+    Done = "done",
+    Shape = "shape",
+    Rule = "rule",
+    Apply = "apply",
+    All = "all",
+    Undo = "undo",
+    Redo = "redo",
+    Help = "help",
 }
 
 #[derive(Debug)]
@@ -27,70 +29,82 @@ impl Token {
     }
 }
 
-pub struct Lexer<Chars: Iterator<Item = char>> {
-    chars: Peekable<Chars>,
+pub struct Lexer<'a> {
+    pub chars: Peekable<Chars<'a>>,
+    pub text: String,
 }
 
-impl<Chars> Lexer<Chars>
-where
-    Chars: Iterator<Item = char>,
-{
-    pub fn from_iter(chars: Chars) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn from_iter(chars: Peekable<Chars<'a>>) -> Self {
         Self {
-            chars: chars.peekable(),
+            chars,
+            text: String::new(),
+        }
+    }
+
+    pub fn is_done(&mut self) -> bool {
+        if let Some(c) = self.chars.peek() {
+            if c.is_whitespace() {
+                if self.chars.next().is_none() {
+                    return true;
+                }
+                return self.is_done();
+            }
+            return false;
+        } else {
+            return true;
         }
     }
 }
 
-impl<'a> From<&'a str> for Lexer<std::str::Chars<'a>> {
+impl<'a> From<&'a str> for Lexer<'a> {
     fn from(str: &'a str) -> Self {
-        Lexer::from_iter(str.chars())
+        Lexer::from_iter(str.chars().peekable())
     }
 }
 
-impl<'a> From<&'a Box<String>> for Lexer<std::str::Chars<'a>> {
-    fn from(str: &'a Box<String>) -> Self {
-        Lexer::from_iter(str.chars())
-    }
-}
+#[macro_export]
+macro_rules! token_kinds {
+    ($($kind:ident$(= $val:literal)?),+$(,)?) => {
+        #[derive(Debug, PartialEq)]
+        pub enum TokenKind {
+            $($kind),+
+        }
 
-impl<Chars> Iterator for Lexer<Chars>
-where
-    Chars: Iterator<Item = char>,
-{
-    type Item = Token;
+        impl<'a> Iterator for Lexer<'a> {
+            type Item = Token;
 
-    fn next(&mut self) -> Option<Token> {
-        let mut text = String::new();
-        while let Some(_) = self.chars.next_if(|x| x.is_whitespace()) {}
-        if let Some(c) = self.chars.next() {
-            use TokenKind::*;
-            text.push(c);
-            match c {
-                '(' => Some(Token::new(OpenParen, text)),
-                ')' => Some(Token::new(CloseParen, text)),
-                ',' => Some(Token::new(Comma, text)),
-                '=' => Some(Token::new(Equals, text)),
-                _ => {
-                    if !c.is_alphanumeric() {
-                        return None;
+            fn next(&mut self) -> Option<Token> {
+                let mut text = String::new();
+                while let Some(_) = self.chars.next_if(|x| x.is_whitespace()) {}
+                if let Some(c) = self.chars.next() {
+                    use TokenKind::*;
+                    text.push(c);
+                    match c.to_string().as_str() {
+                        $($($val => Some(Token::new($kind, text)),)?)+
+                        c => {
+                            let c = c.chars().nth(0).unwrap();
+                            if !c.is_alphanumeric() {
+                                return None;
+                            }
+
+                            while let Some(c) = self
+                                .chars
+                                .next_if(|x| x.is_alphanumeric() && !x.is_whitespace())
+                            {
+                                text.push(c);
+                            }
+
+                            match text.as_str() {
+                                $($($val => Some(Token::new($kind, text)),)?)+
+                                _ => Some(Token::new(Sym, text)),
+                            }
+                        }
                     }
-
-                    while let Some(c) = self.chars.next_if(|x| x.is_alphanumeric()) {
-                        text.push(c);
-                    }
-
-                    match text.as_str() {
-                        "done" => Some(Token::new(Done, text)),
-                        "shape" => Some(Token::new(Shape, text)),
-                        "rule" => Some(Token::new(Rule, text)),
-                        "apply" => Some(Token::new(Apply, text)),
-                        _ => Some(Token::new(Sym, text)),
-                    }
+                } else {
+                    None
                 }
             }
-        } else {
-            None
         }
-    }
+    };
 }

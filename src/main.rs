@@ -3,11 +3,13 @@
 
 use std::env::args;
 
+use self::context::Context;
+
 mod bindings;
+mod context;
 mod lexer;
 mod repl;
 mod rule;
-mod runner;
 mod tests;
 
 #[macro_export]
@@ -85,8 +87,7 @@ macro_rules! rule {
 fn main() -> anyhow::Result<()> {
     std::panic::set_hook(Box::new(|info| {
         crossterm::terminal::disable_raw_mode().unwrap();
-        println!("");
-        println!("The program has panicked. Please report this to https://github.com/willothy/noq/issues");
+        println!("\nThe program has panicked. Please report this to https://github.com/willothy/noq/issues");
         if let Some(location) = info.location() {
             if let Some(payload) = info.message() {
                 println!("Panicked with \"{}\" at {}", payload, location);
@@ -98,7 +99,18 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(file) = args().nth(1) {
         let source = std::fs::read_to_string(file).unwrap();
-        runner::Runner::run_file(&*source)?;
+        let mut runner = Context::new(lexer::Lexer::from_iter(source.chars().peekable()));
+
+        while !runner.lexer.peek().is_none() {
+            match runner.run_cmd() {
+                Ok(Some(output)) => println!(" => {}", output),
+                Ok(None) => (),
+                Err(e) => {
+                    println!(" !> {}", e);
+                    break;
+                }
+            }
+        }
     } else {
         repl::Repl::run();
     }

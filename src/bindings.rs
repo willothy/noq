@@ -14,15 +14,12 @@ pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Result<Ex
     Ok(match expr {
         Expr::Sym(_) => expr.clone(),
         Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
-        Expr::Fun(head, args) => {
-            let new_head = substitute_bindings(bindings, head)?;
-            Expr::Fun(
-                box new_head,
-                args.iter()
-                    .map(|arg| substitute_bindings(bindings, arg))
-                    .collect::<Result<Vec<_>>>()?,
-            )
-        }
+        Expr::Fun(head, args) => Expr::Fun(
+            box substitute_bindings(bindings, head)?,
+            args.iter()
+                .map(|arg| substitute_bindings(bindings, arg))
+                .collect::<Result<Vec<_>>>()?,
+        ),
     })
 }
 
@@ -40,7 +37,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                 }
             }
             (Fun(pat_name, pat_args), Expr::Fun(val_name, val_args)) => {
-                if pat_name == val_name && pat_args.len() == val_args.len() {
+                if matches(pat_name, val_name, bindings) && pat_args.len() == val_args.len() {
                     pat_args
                         .iter()
                         .zip(val_args.iter())

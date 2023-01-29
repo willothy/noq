@@ -1,33 +1,35 @@
-use std::{collections::HashMap, io::stdout};
+use std::{io::stdout, str::Chars, string::Drain};
 
 use crossterm::{
-    cursor::{self, MoveDown, MoveToColumn, Show},
+    cursor::{self, MoveDown, MoveTo, MoveToColumn, MoveToNextLine, MoveToPreviousLine, Show},
     event::{read, Event, KeyCode, KeyEvent},
     execute,
     style::Print,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollDown, ScrollUp},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
 };
+use linked_hash_map::LinkedHashMap;
 use thiserror::Error;
 
 use crate::{
+    context::Context,
     lexer::Lexer,
     rule::{Expr, Rule},
 };
 
-pub struct Repl {
+pub struct Repl<'a> {
     prompt: String,
     input_buf: String,
     res: Vec<String>,
     history: Vec<String>,
     history_index: usize,
-    state: ReplState,
     insert: usize,
+    quit: bool,
+    state: Context<'a>,
 }
 
 struct ReplState {
-    rules: HashMap<String, Rule>,
+    rules: LinkedHashMap<String, Rule>,
     shape: Option<Expr>,
-    quit: bool,
 }
 
 #[derive(Debug, Error)]
@@ -36,81 +38,21 @@ struct ReplError(String);
 
 type ReplResult = anyhow::Result<Option<String>>;
 
-impl Repl {
+static mut INPUT: String = String::new();
+
+impl<'a> Repl<'a> {
     pub fn run() {
         let mut repl = Repl {
-            prompt: "> ".to_string(),
+            prompt: std::env::var("PS1").unwrap_or_else(|_| ">> ".to_string()),
             input_buf: String::new(),
             res: Vec::new(),
             insert: 0,
             history: Vec::new(),
             history_index: 0,
-            state: ReplState {
-                rules: HashMap::new(),
-                shape: None,
-                quit: false,
-            },
+            quit: false,
+            state: Context::new(Lexer::from_iter("".chars().peekable())),
         };
         repl.run_loop();
-    }
-
-    fn panic(&mut self, _: String) -> ReplResult {
-        panic!("REPL Explicit panic!");
-        #[allow(unreachable_code)]
-        Ok(None)
-    }
-
-    fn quit(&mut self, _: String) -> ReplResult {
-        self.state.quit = true;
-        Ok(None)
-    }
-
-    fn shape(&mut self, rest: String) -> ReplResult {
-        if rest.trim().is_empty() {
-            return Ok(if let Some(shape) = &self.state.shape {
-                Some(format!("{}", shape))
-            } else {
-                Some(format!("No shape defined"))
-            });
-        }
-        let shape = Expr::parse(Lexer::from(&*rest))?;
-        self.state.shape = Some(shape.clone());
-        Ok(Some(format!("{}", shape)))
-    }
-
-    fn rule(&mut self, rest: String) -> ReplResult {
-        let Some(name) = rest.trim().split_whitespace().next() else {
-            return Err(ReplError("Expected rule name and rule".into()).into());
-        };
-        let rule = Rule::parse(Lexer::from(&rest[name.len()..]))?;
-        let res = format!("Added rule {}: {}", name, rule);
-        self.state.rules.insert(name.to_owned(), rule);
-        Ok(Some(res))
-    }
-
-    fn apply(&mut self, rest: String) -> ReplResult {
-        let Some(rule_name) = rest.trim().split_whitespace().next() else {
-            return Err(ReplError("Expected rule name and rule".into()).into());
-        };
-        let rule = if rule_name.trim() == "rule" {
-            Rule::parse(Lexer::from(&rest[rule_name.len()..]))?
-        } else {
-            let Some(rule) = self.state.rules.get(rule_name) else {
-                return Err(ReplError(format!("Unknown rule {}", rule_name)).into());
-            };
-            rule.clone()
-        };
-
-        let new_shape = rule.apply_all({
-            let Some(shape) = &self.state.shape else {
-                return Err(ReplError("No shape defined".into()).into());
-            };
-            shape
-        })?;
-
-        let new_shape_str = format!("{}", new_shape);
-        self.state.shape = Some(new_shape);
-        Ok(Some(new_shape_str))
     }
 
     fn run_loop(&mut self) {
@@ -123,24 +65,19 @@ impl Repl {
             // Do thing
         )
         .unwrap();
-        let mut cursor_start = cursor::position().unwrap().1;
-        let mut cursor_offset_from_start = 0;
 
-        while !self.state.quit {
+        while !self.quit {
             // Use crossterm to print the latest <terminal height>
             let mut term_height = crossterm::terminal::size().unwrap().1;
 
-            for line in self.res.drain(..).take(term_height as usize - 1) {
-                execute!(
-                    stdout,
-                    MoveToColumn(0),
-                    Clear(ClearType::CurrentLine),
-                    Print(line),
-                    ScrollUp(1),
-                )
-                .unwrap();
+            disable_raw_mode().unwrap();
+
+            for line in self.res.drain(..) {
+                execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine),).unwrap();
+                println!("{}", line);
             }
 
+            enable_raw_mode().unwrap();
             execute!(
                 stdout,
                 MoveToColumn(0),
@@ -205,7 +142,7 @@ impl Repl {
                     modifiers: crossterm::event::KeyModifiers::CONTROL,
                     ..
                 }) => {
-                    self.state.quit = true;
+                    self.quit = true;
                 }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Char(c),
@@ -239,20 +176,23 @@ impl Repl {
                         continue;
                     }
                     self.history.push(self.input_buf.clone());
-                    let input = self.input_buf.clone();
-
-                    match self.handle_input() {
+                    self.insert = 0;
+                    let input = self.input_buf.drain(..).collect();
+                    match self.handle_input(input) {
                         Ok(Some(output)) => {
-                            self.res =
-                                vec![self.prompt.clone() + &input, format!("  => {}", output)];
+                            self.res = vec![
+                                self.prompt.clone() + &self.history.last().unwrap(),
+                                format!("  => {}", output),
+                            ];
                         }
                         Ok(None) => (),
                         Err(err) => {
-                            self.res =
-                                vec![self.prompt.clone() + &input, format!("  => Error: {}", err)];
+                            self.res = vec![
+                                self.prompt.clone() + &self.history.last().unwrap(),
+                                format!("  => Error: {}", err),
+                            ];
                         }
                     }
-                    self.insert = 0;
                 }
                 _ => {}
             }
@@ -268,42 +208,14 @@ impl Repl {
         disable_raw_mode().unwrap();
     }
 
-    fn handle_input(&mut self) -> ReplResult {
-        let input = self.input_buf.drain(..).collect::<String>();
-
-        let (cmd, args) = {
-            let mut split = input.split_whitespace();
-            let Some(cmd) = split.next() else {
-                // No command given
-                return Ok(None);
-            };
-            (cmd, split.collect::<Vec<&str>>().join(" "))
-        };
-
-        macro_rules! commands {
-            (
-                $(
-                    $name:ident
-                    $(
-                        (
-                            $($alias:ident),+
-                        )
-                    )?
-                ),+
-            ) => {
-                match cmd {
-                    $(
-                        stringify!($name) $($(| stringify!($alias))+)? => self.$name(args),
-                    )+
-                    unknown => Err(
-                        ReplError(
-                            format!("Unknown command {}. Expected one of {}.", unknown, stringify!($($name$(($($alias),+))?),+))
-                        ).into()
-                    ),
-                }
-            }
+    pub fn handle_input(&mut self, str: String) -> ReplResult {
+        unsafe {
+            INPUT = str;
         }
-
-        commands!(shape, rule, apply, quit(q), panic)
+        let lexer = Lexer::from_iter(unsafe { INPUT.chars() }.peekable());
+        let mut runner = self.state.rebuild(lexer);
+        let out = runner.run_cmd()?;
+        self.state = runner;
+        return Ok(out);
     }
 }
