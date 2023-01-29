@@ -1,11 +1,11 @@
 use std::{collections::HashMap, io::stdout};
 
 use crossterm::{
-    cursor::{self, MoveToColumn},
+    cursor::{self, MoveDown, MoveToColumn, Show},
     event::{read, Event, KeyCode, KeyEvent},
     execute,
     style::Print,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollDown, ScrollUp},
 };
 use thiserror::Error;
 
@@ -17,7 +17,7 @@ use crate::{
 pub struct Repl {
     prompt: String,
     input_buf: String,
-    lines: Vec<String>,
+    res: Vec<String>,
     history: Vec<String>,
     history_index: usize,
     state: ReplState,
@@ -41,8 +41,8 @@ impl Repl {
         let mut repl = Repl {
             prompt: "> ".to_string(),
             input_buf: String::new(),
+            res: Vec::new(),
             insert: 0,
-            lines: Vec::new(),
             history: Vec::new(),
             history_index: 0,
             state: ReplState {
@@ -52,6 +52,12 @@ impl Repl {
             },
         };
         repl.run_loop();
+    }
+
+    fn panic(&mut self, _: String) -> ReplResult {
+        panic!("REPL Explicit panic!");
+        #[allow(unreachable_code)]
+        Ok(None)
     }
 
     fn quit(&mut self, _: String) -> ReplResult {
@@ -110,29 +116,35 @@ impl Repl {
     fn run_loop(&mut self) {
         let mut stdout = stdout();
         enable_raw_mode().unwrap();
-        execute!(stdout, Clear(ClearType::All)).unwrap();
+        execute!(
+            stdout,
+            MoveDown(1),
+            Clear(ClearType::FromCursorDown),
+            // Do thing
+        )
+        .unwrap();
+        let mut cursor_start = cursor::position().unwrap().1;
+        let mut cursor_offset_from_start = 0;
 
         while !self.state.quit {
             // Use crossterm to print the latest <terminal height>
-            let term_height = crossterm::terminal::size().unwrap().1;
-            execute!(stdout, Clear(ClearType::All)).unwrap();
-            self.lines
-                .iter()
-                .rev()
-                .take(term_height as usize - 3)
-                .enumerate()
-                .for_each(|(idx, line)| {
-                    execute!(
-                        stdout,
-                        cursor::Hide,
-                        cursor::MoveTo(0, term_height - 3 - idx as u16),
-                        Print(line)
-                    )
-                    .unwrap();
-                });
+            let mut term_height = crossterm::terminal::size().unwrap().1;
+
+            for line in self.res.drain(..).take(term_height as usize - 1) {
+                execute!(
+                    stdout,
+                    MoveToColumn(0),
+                    Clear(ClearType::CurrentLine),
+                    Print(line),
+                    ScrollUp(1),
+                )
+                .unwrap();
+            }
+
             execute!(
                 stdout,
-                cursor::MoveTo(0, term_height - 1),
+                MoveToColumn(0),
+                Clear(ClearType::CurrentLine),
                 Print(&(self.prompt.clone() + &self.input_buf)),
                 MoveToColumn(self.prompt.len() as u16 + self.insert as u16),
                 cursor::Show
@@ -140,6 +152,9 @@ impl Repl {
             .unwrap();
 
             match read().unwrap() {
+                Event::Resize(_, y) => {
+                    term_height = y;
+                }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Up,
                     modifiers: crossterm::event::KeyModifiers::NONE,
@@ -150,6 +165,7 @@ impl Repl {
                         self.history_index += 1;
                         self.input_buf =
                             self.history[self.history.len() - self.history_index].clone();
+                        self.insert = self.input_buf.len();
                     }
                 }
                 Event::Key(KeyEvent {
@@ -162,8 +178,10 @@ impl Repl {
                         self.history_index -= 1;
                         self.input_buf =
                             self.history[self.history.len() - self.history_index].clone();
+                        self.insert = self.input_buf.len();
                     } else {
                         self.input_buf.clear();
+                        self.insert = 0;
                     }
                 }
                 Event::Key(KeyEvent {
@@ -182,6 +200,13 @@ impl Repl {
                     }
                     _ => (),
                 },
+                Event::Key(KeyEvent {
+                    code: crossterm::event::KeyCode::Char('c'),
+                    modifiers: crossterm::event::KeyModifiers::CONTROL,
+                    ..
+                }) => {
+                    self.state.quit = true;
+                }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Char(c),
                     ..
@@ -209,21 +234,37 @@ impl Repl {
                     code: crossterm::event::KeyCode::Enter,
                     ..
                 }) => {
-                    self.history.push(self.input_buf.clone());
                     self.history_index = 0;
-                    self.lines.push(self.prompt.clone() + &self.input_buf);
+                    if self.input_buf.trim().is_empty() {
+                        continue;
+                    }
+                    self.history.push(self.input_buf.clone());
+                    let input = self.input_buf.clone();
 
                     match self.handle_input() {
-                        Ok(Some(output)) => self.lines.push(format!("  => {}", output)),
+                        Ok(Some(output)) => {
+                            self.res =
+                                vec![self.prompt.clone() + &input, format!("  => {}", output)];
+                        }
                         Ok(None) => (),
-                        Err(err) => self.lines.push(format!("  => Error: {}", err)),
+                        Err(err) => {
+                            self.res =
+                                vec![self.prompt.clone() + &input, format!("  => Error: {}", err)];
+                        }
                     }
                     self.insert = 0;
                 }
                 _ => {}
             }
         }
-        execute!(stdout, cursor::MoveDown(2), MoveToColumn(0), Print("")).unwrap();
+        execute!(
+            stdout,
+            cursor::MoveDown(2),
+            MoveToColumn(0),
+            Print(""),
+            Show
+        )
+        .unwrap();
         disable_raw_mode().unwrap();
     }
 
@@ -263,6 +304,6 @@ impl Repl {
             }
         }
 
-        commands!(shape, rule, apply, quit(q))
+        commands!(shape, rule, apply, quit(q), panic)
     }
 }

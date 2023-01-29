@@ -1,14 +1,16 @@
 #![feature(box_syntax)]
+#![feature(panic_info_message)]
 
-use std::process::ExitCode;
+use std::env::args;
 
 mod bindings;
 mod lexer;
 mod repl;
 mod rule;
+mod runner;
 mod tests;
 
-/* #[macro_export]
+#[macro_export]
 macro_rules! fun_args {
     () => {
         vec![]
@@ -41,10 +43,14 @@ macro_rules! expr {
         crate::rule::Expr::parse(crate::lexer::Lexer::new($source))
     };
     ($name:ident) => {
-        crate::rule::Expr::Sym(stringify!($name).to_string())
+        if stringify!($name).chars().nth(0).unwrap().is_uppercase() {
+            crate::rule::Expr::Var(stringify!($name).to_string())
+        } else {
+            crate::rule::Expr::Sym(stringify!($name).to_string())
+        }
     };
     ($name:ident($($args:tt)*)) => {
-        crate::rule::Expr::Fun(stringify!($name).to_string(), fun_args!( $($args)* ))
+        crate::rule::Expr::Fun(box expr!($name), fun_args!( $($args)* ))
     };
 }
 
@@ -74,9 +80,27 @@ macro_rules! rule {
             body: expr!($body($($body_args)*)),
         }
     };
-} */
+}
 
-fn main() -> ExitCode {
-    repl::Repl::run();
-    ExitCode::SUCCESS
+fn main() -> anyhow::Result<()> {
+    std::panic::set_hook(Box::new(|info| {
+        crossterm::terminal::disable_raw_mode().unwrap();
+        println!("");
+        println!("The program has panicked. Please report this to https://github.com/willothy/noq/issues");
+        if let Some(location) = info.location() {
+            if let Some(payload) = info.message() {
+                println!("Panicked with \"{}\" at {}", payload, location);
+                return;
+            }
+            println!("Panicked with no message at {}", location);
+        }
+    }));
+
+    if let Some(file) = args().nth(1) {
+        let source = std::fs::read_to_string(file).unwrap();
+        runner::Runner::run_file(&*source)?;
+    } else {
+        repl::Repl::run();
+    }
+    Ok(())
 }

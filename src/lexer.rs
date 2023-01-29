@@ -7,6 +7,12 @@ pub enum TokenKind {
     CloseParen,
     Comma,
     Equals,
+
+    // Keywords
+    Done,
+    Shape,
+    Rule,
+    Apply,
 }
 
 #[derive(Debug)]
@@ -42,6 +48,12 @@ impl<'a> From<&'a str> for Lexer<std::str::Chars<'a>> {
     }
 }
 
+impl<'a> From<&'a Box<String>> for Lexer<std::str::Chars<'a>> {
+    fn from(str: &'a Box<String>) -> Self {
+        Lexer::from_iter(str.chars())
+    }
+}
+
 impl<Chars> Iterator for Lexer<Chars>
 where
     Chars: Iterator<Item = char>,
@@ -68,7 +80,13 @@ where
                         text.push(c);
                     }
 
-                    Some(Token::new(Sym, text))
+                    match text.as_str() {
+                        "done" => Some(Token::new(Done, text)),
+                        "shape" => Some(Token::new(Shape, text)),
+                        "rule" => Some(Token::new(Rule, text)),
+                        "apply" => Some(Token::new(Apply, text)),
+                        _ => Some(Token::new(Sym, text)),
+                    }
                 }
             }
         } else {
