@@ -392,9 +392,7 @@ impl Repl {
             INPUT = str;
         }
         let mut lexer = Lexer::new(unsafe { INPUT.chars() }.peekable());
-        let mut runner = self.context.rebuild(&lexer);
-        let out = runner.step(&mut lexer)?;
-        self.context = runner;
+        let out = self.context.step(&mut lexer)?;
         return Ok(out);
     }
 }

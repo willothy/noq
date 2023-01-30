@@ -100,18 +100,10 @@ fn main() -> anyhow::Result<()> {
     if let Some(file) = args().nth(1) {
         let source = std::fs::read_to_string(file).unwrap();
         let mut lexer = Lexer::new(source.chars().peekable());
-        let mut lexer2 = Lexer::new(source.chars().peekable());
-        loop {
-            let tok = lexer2.next_if(|_| true);
-            println!("{:?}", tok);
-            if lexer2.exhausted {
-                break;
-            }
-        }
-        let mut runner = Context::new();
+        let mut context = Context::new();
 
         while !lexer.exhausted {
-            match runner.step(&mut lexer) {
+            match context.step(&mut lexer) {
                 Ok(Some(output)) => println!(" => {}", output),
                 Ok(None) => (),
                 Err(e) => {

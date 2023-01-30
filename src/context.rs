@@ -59,7 +59,7 @@ impl Context {
         }
     }
 
-    pub fn rebuild(&self, lexer: &Lexer<impl Iterator<Item = char>>) -> Self {
+    pub fn rebuild(&self) -> Self {
         Self {
             quit: false,
             rules: self.rules.clone(),
@@ -273,7 +273,6 @@ impl Context {
                 while !lexer.exhausted {
                     self.step(&mut lexer)?;
                 }
-                self.rebuild(&lexer);
 
                 Ok(None)
             }
