@@ -5,7 +5,7 @@ use crate::{
     rule::{self, Expr, Rule},
 };
 use anyhow::Result;
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Stylize;
 use linked_hash_map::LinkedHashMap;
 
 pub struct Context<'a> {
@@ -14,7 +14,31 @@ pub struct Context<'a> {
     apply_history: Vec<Expr>,
     undo_history: Vec<Expr>,
     shape: Option<Expr>,
+    pub quit: bool,
 }
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid command {0}. Expected one of {}", crate::commands!())]
+    InvalidCommand(String),
+    #[error("Expected rule name")]
+    ExpectedRuleName,
+    #[error("No rule named {0}")]
+    RuleDoesNotExist(String),
+    #[error("Expected rule expression or anonymous rule")]
+    ExpectedRuleExprOrAnon,
+    #[error("No shape defined")]
+    NoShape,
+    #[error("Already shaping")]
+    AlreadyShaping,
+    #[error("Nothing to undo")]
+    NothingToUndo,
+    #[error("Nothing to redo")]
+    NothingToRedo,
+    #[error("Unexpected end of file")]
+    UnexpectedEOF,
+}
+use crate::context::Error::*;
 
 impl<'a> Context<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
@@ -24,16 +48,26 @@ impl<'a> Context<'a> {
             apply_history: Vec::new(),
             undo_history: Vec::new(),
             shape: None,
+            quit: false,
         }
     }
 
     pub fn rebuild(&self, lexer: Lexer<'a>) -> Self {
         Self {
             lexer: lexer.peekable(),
+            quit: false,
             rules: self.rules.clone(),
             apply_history: self.apply_history.clone(),
             undo_history: self.undo_history.clone(),
             shape: self.shape.clone(),
+        }
+    }
+
+    pub fn show_shape(&self) -> Result<String> {
+        if let Some(shape) = &self.shape {
+            Ok(format!("{}", shape))
+        } else {
+            Err(NoShape.into())
         }
     }
 
@@ -48,7 +82,7 @@ impl<'a> Context<'a> {
                     kind: lexer::TokenKind::Sym,
                     text: name,
                 }) = lexer.next() else {
-                    return Err(anyhow::anyhow!("Expected rule name"));
+                    return Err(ExpectedRuleName.into());
                 };
                 self.rules.insert(name, Rule::parse(&mut lexer)?);
                 Ok(None)
@@ -76,27 +110,27 @@ impl<'a> Context<'a> {
                                 shape,
                                 self.rules
                                     .get(&name)
-                                    .ok_or(anyhow::anyhow!("No rule named {}", name))?
+                                    .ok_or(RuleDoesNotExist(name))?
                                     .apply_all(&shape)?,
                             ));
                         }
                         _ => {
-                            return Err(anyhow::anyhow!("Expected rule name or anonymous rule"));
+                            return Err(ExpectedRuleExprOrAnon.into());
                         }
                     }
 
                     Ok(Some(format!("{}", self.shape.clone().unwrap())))
                 } else {
-                    return Err(anyhow::anyhow!("No shape to apply to"));
+                    return Err(NoShape.into());
                 }
             }
             Some(lexer::Token {
                 kind: lexer::TokenKind::Shape,
                 ..
             }) => {
-                if let Some(tok) = lexer.peek() {
+                if let Some(_) = lexer.peek() {
                     if self.shape.is_some() {
-                        return Err(anyhow::anyhow!("Shape already defined"));
+                        return Err(AlreadyShaping.into());
                     }
                     self.shape = Some(rule::Expr::parse(&mut lexer)?);
                     Ok(Some(format!("{}", self.shape.clone().unwrap())))
@@ -104,7 +138,7 @@ impl<'a> Context<'a> {
                     if let Some(shape) = &self.shape {
                         return Ok(Some(format!("{}", shape)));
                     } else {
-                        return Err(anyhow::anyhow!("No shape defined"));
+                        return Err(NoShape.into());
                     }
                 }
             }
@@ -121,7 +155,7 @@ impl<'a> Context<'a> {
                         "\u{2714}\n".green().bold()
                     )))
                 } else {
-                    Err(anyhow::anyhow!("No shape defined".red().bold()))
+                    Err(NoShape.into())
                 }
             }
             Some(lexer::Token {
@@ -133,7 +167,7 @@ impl<'a> Context<'a> {
                         .push(std::mem::replace(&mut self.shape, Some(shape)).unwrap());
                     Ok(Some(format!("{}", self.shape.clone().unwrap())))
                 } else {
-                    Err(anyhow::anyhow!("Nothing to undo".red()))
+                    Err(NothingToUndo.into())
                 }
             }
             Some(lexer::Token {
@@ -145,7 +179,7 @@ impl<'a> Context<'a> {
                         .push(std::mem::replace(&mut self.shape, Some(shape)).unwrap());
                     Ok(Some(format!("{}", self.shape.clone().unwrap())))
                 } else {
-                    Err(anyhow::anyhow!("Nothing to redo".red()))
+                    Err(NothingToRedo.into())
                 }
             }
             Some(lexer::Token {
@@ -155,7 +189,7 @@ impl<'a> Context<'a> {
                 let color = |s: &'a str| s.dark_cyan().bold();
                 let underline = |s: &'a str| s.underlined();
                 Ok(Some(format!(
-    "Commands:
+                    "Commands:
          {rule} {rule_name} <rule>; - define a rule
          {apply} {rule_name}        - apply a rule to the shape
          {apply} {rule} <rule>;       - apply an anonymous rule to the shape
@@ -176,23 +210,27 @@ impl<'a> Context<'a> {
              {apply} {rot}
          {done}
                     ",
-                    rule=color("rule"),
+                    rule = color("rule"),
                     rule_name = underline("<rule_name>"),
                     rot = underline("rot"),
                     swap = underline("swap"),
-                    shape=color("shape"),
-                    done=color("done"),
-                    undo=color("undo"),
-                    redo=color("redo"),
-                    help=color("help"),
-                    apply=color("apply")
+                    shape = color("shape"),
+                    done = color("done"),
+                    undo = color("undo"),
+                    redo = color("redo"),
+                    help = color("help"),
+                    apply = color("apply")
                 )))
             }
-            Some(invalid) => Err(anyhow::anyhow!(
-                "Invalid command {}. expected one of \"help\", \"rule\", \"apply\", \"shape\", \"done\", \"undo\", \"redo\"",
-                invalid.text.red().bold()
-            )),
-            None => Err(anyhow::anyhow!("Unexpected end of file".red().bold())),
+            Some(lexer::Token {
+                kind: lexer::TokenKind::Quit,
+                ..
+            }) => {
+                self.quit = true;
+                Ok(None)
+            }
+            Some(invalid) => Err(InvalidCommand(format!("{}", invalid.text.red().bold())).into()),
+            None => Err(UnexpectedEOF.into()),
         }
     }
 }

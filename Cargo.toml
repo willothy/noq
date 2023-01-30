@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
+casey = "0.3.3"
 crossterm = "0.25.0"
 linked-hash-map = "0.5.6"
+snailquote = "0.3.1"
+strip-ansi-escapes = "0.1.1"
 thiserror = "1.0.38"

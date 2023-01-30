@@ -1,36 +1,36 @@
-use std::{io::stdout, str::Chars, string::Drain};
+use std::{
+    collections::HashMap,
+    io::{stdout, Write},
+};
 
 use crossterm::{
-    cursor::{self, MoveDown, MoveTo, MoveToColumn, MoveToNextLine, MoveToPreviousLine, Show},
+    cursor::{self, MoveDown, MoveToColumn, MoveUp, Show},
     event::{read, Event, KeyCode, KeyEvent},
     execute,
-    style::Print,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
+    style::{Print, StyledContent, Stylize},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
-use linked_hash_map::LinkedHashMap;
+use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
+    commands,
     context::Context,
-    lexer::Lexer,
-    rule::{Expr, Rule},
+    lexer::{self, Lexer},
 };
 
 pub struct Repl<'a> {
-    prompt: String,
+    prompt: Vec<String>,
     input_buf: String,
-    res: Vec<String>,
-    history: Vec<String>,
+    result_lines_buf: Vec<String>,
+    command_history: Vec<String>,
     history_index: usize,
     insert: usize,
     quit: bool,
-    state: Context<'a>,
+    context: Context<'a>,
 }
 
-struct ReplState {
-    rules: LinkedHashMap<String, Rule>,
-    shape: Option<Expr>,
-}
+const DEFAULT_PROMPT: &str = "noq > ";
 
 #[derive(Debug, Error)]
 #[error("Error: {0}")]
@@ -40,57 +40,198 @@ type ReplResult = anyhow::Result<Option<String>>;
 
 static mut INPUT: String = String::new();
 
+pub trait Highlight {
+    fn highlight(&self) -> StyledContent<String>;
+}
+
+pub enum HighlightKind {
+    Command,
+    Comment,
+    Num,
+    Str,
+}
+
+impl Highlight for String {
+    fn highlight(&self) -> StyledContent<String> {
+        use HighlightKind::*;
+        let mut highlights = HashMap::new();
+
+        let mut start = 0;
+        let mut curr = 0;
+        let mut word = String::new();
+
+        let mut chars = self.chars().enumerate();
+        loop {
+            match chars.next() {
+                Some((idx, '#')) => {
+                    if !word.is_empty() {
+                        for command in lexer::COMMANDS {
+                            if word.trim() == &command[1..command.len() - 1] {
+                                let word = word.drain(..).collect::<String>();
+                                highlights.insert(start, (Command, word));
+                            }
+                        }
+                        word.clear();
+                        start = idx + 1;
+                    }
+                    let mut comment = String::new();
+                    comment.push('#');
+                    loop {
+                        match chars.next() {
+                            Some((_, '\n')) => {
+                                curr += 1;
+                                comment.push('\n');
+                                break;
+                            }
+                            Some((_, c)) => {
+                                curr += 1;
+                                comment.push(c);
+                            }
+                            None => {
+                                break;
+                            }
+                        }
+                    }
+                    highlights.insert(start, (Comment, comment));
+                    start = curr + 1;
+                }
+                Some((idx, c)) => {
+                    if c.is_alphanumeric() {
+                        word.push(c);
+                    } else {
+                        for command in lexer::COMMANDS {
+                            if word.trim() == &command[1..command.len() - 1] {
+                                let word = word.drain(..).collect::<String>();
+                                highlights.insert(start, (Command, word));
+                            }
+                        }
+                        word.clear();
+                        start = idx + 1;
+                    }
+                }
+                None => {
+                    if !word.is_empty() {
+                        for command in lexer::COMMANDS {
+                            if word.trim() == &command[1..command.len() - 1] {
+                                let word = word.drain(..).collect::<String>();
+                                highlights.insert(start, (Command, word));
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        let mut res = String::new();
+
+        let mut chars = self.chars().enumerate();
+        loop {
+            let Some((idx, curr_char)) = &chars.next() else {
+                break;
+            };
+            if let Some((kind, hl)) = highlights.get(&idx) {
+                for _ in 0..hl.len() - 1 {
+                    chars.next();
+                }
+                let hl = match kind {
+                    Command => hl.clone().blue().to_string(),
+                    Comment => hl.clone().yellow().to_string(),
+                    Num => hl.clone().yellow().to_string(),
+                    Str => hl.clone().red().to_string(),
+                };
+                res.push_str(&hl)
+            } else {
+                res.push(*curr_char);
+            }
+        }
+        res.stylize()
+    }
+}
+
 impl<'a> Repl<'a> {
     pub fn run() {
         let mut repl = Repl {
-            prompt: std::env::var("PS1").unwrap_or_else(|_| ">> ".to_string()),
+            prompt: std::env::var("NOQ")
+                .map(|v| v.replace("\\[", ""))
+                .map(|v| v.replace("\\]", ""))
+                .map(|v| v.replace("\\033", "\x1b"))
+                .map(|v| v.replace("\\e", "\x1b"))
+                .map(|v| v.replace("\\n", "\n"))
+                .map(|v| v.replace("\\r", "\r"))
+                .map(|v| v.replace("\\u", "noq"))
+                .map(|v| {
+                    v.replace(
+                        "\\h",
+                        std::env::var("HOSTNAME")
+                            .unwrap_or_else(|_| "hostname".to_string())
+                            .as_str(),
+                    )
+                })
+                .map(|v| v.replace("\\w", std::env::current_dir().unwrap().to_str().unwrap()))
+                .map(|v| v.replace("\\$", "$"))
+                .map(|v| snailquote::unescape(&v).unwrap())
+                .unwrap_or_else(|_| DEFAULT_PROMPT.to_string())
+                .lines()
+                .map(|s| s.to_string())
+                .collect(),
             input_buf: String::new(),
-            res: Vec::new(),
+            result_lines_buf: Vec::new(),
             insert: 0,
-            history: Vec::new(),
+            command_history: Vec::new(),
             history_index: 0,
             quit: false,
-            state: Context::new(Lexer::from_iter("".chars().peekable())),
+            context: Context::new(Lexer::from_iter("".chars().peekable())),
         };
+
         repl.run_loop();
+    }
+
+    fn prepare_prompt_line(&self, line: &String) -> String {
+        let shape = self
+            .context
+            .show_shape()
+            .unwrap_or("noq".to_string())
+            .clone();
+        line.replace("\\s", &shape)
     }
 
     fn run_loop(&mut self) {
         let mut stdout = stdout();
+        execute!(stdout, MoveDown(1), Clear(ClearType::FromCursorDown)).unwrap();
+        for (idx, line) in self.prompt.iter().enumerate() {
+            if idx == self.prompt.len() - 1 {
+                print!("{}", self.prepare_prompt_line(line));
+                stdout.flush().unwrap();
+            } else {
+                println!("{}", self.prepare_prompt_line(line));
+            }
+        }
         enable_raw_mode().unwrap();
-        execute!(
-            stdout,
-            MoveDown(1),
-            Clear(ClearType::FromCursorDown),
-            // Do thing
-        )
-        .unwrap();
 
         while !self.quit {
-            // Use crossterm to print the latest <terminal height>
-            let mut term_height = crossterm::terminal::size().unwrap().1;
-
-            disable_raw_mode().unwrap();
-
-            for line in self.res.drain(..) {
-                execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine),).unwrap();
-                println!("{}", line);
+            let mut _term_height = crossterm::terminal::size().unwrap().1;
+            if self.context.quit {
+                self.quit = true;
+                continue;
             }
 
-            enable_raw_mode().unwrap();
+            let stripped = strip(self.prompt.last().unwrap()).unwrap();
+            let input_line = String::from_utf8_lossy(&stripped);
+            let prompt_len = input_line.trim_end().len() as u16 + 1;
             execute!(
                 stdout,
-                MoveToColumn(0),
-                Clear(ClearType::CurrentLine),
-                Print(&(self.prompt.clone() + &self.input_buf)),
-                MoveToColumn(self.prompt.len() as u16 + self.insert as u16),
+                MoveToColumn(prompt_len),
+                Clear(ClearType::FromCursorDown),
+                Print(&self.input_buf.highlight()),
+                MoveToColumn(prompt_len + self.insert as u16),
                 cursor::Show
             )
             .unwrap();
 
             match read().unwrap() {
                 Event::Resize(_, y) => {
-                    term_height = y;
+                    _term_height = y;
                 }
                 Event::Key(KeyEvent {
                     code: crossterm::event::KeyCode::Up,
@@ -98,10 +239,11 @@ impl<'a> Repl<'a> {
                     kind: crossterm::event::KeyEventKind::Press,
                     ..
                 }) => {
-                    if self.history_index < self.history.len() {
+                    if self.history_index < self.command_history.len() {
                         self.history_index += 1;
-                        self.input_buf =
-                            self.history[self.history.len() - self.history_index].clone();
+                        self.input_buf = self.command_history
+                            [self.command_history.len() - self.history_index]
+                            .clone();
                         self.insert = self.input_buf.len();
                     }
                 }
@@ -113,8 +255,9 @@ impl<'a> Repl<'a> {
                 }) => {
                     if self.history_index > 1 {
                         self.history_index -= 1;
-                        self.input_buf =
-                            self.history[self.history.len() - self.history_index].clone();
+                        self.input_buf = self.command_history
+                            [self.command_history.len() - self.history_index]
+                            .clone();
                         self.insert = self.input_buf.len();
                     } else {
                         self.input_buf.clear();
@@ -175,33 +318,70 @@ impl<'a> Repl<'a> {
                     if self.input_buf.trim().is_empty() {
                         continue;
                     }
-                    self.history.push(self.input_buf.clone());
+                    self.command_history.push(self.input_buf.clone());
                     self.insert = 0;
                     let input = self.input_buf.drain(..).collect();
+
                     match self.handle_input(input) {
                         Ok(Some(output)) => {
-                            self.res = vec![
-                                self.prompt.clone() + &self.history.last().unwrap(),
-                                format!("  => {}", output),
+                            let mut res = vec![
+                                self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
+                                    + self.command_history.last().unwrap(),
                             ];
+                            res.push(format!(
+                                "{:width$}=> {}",
+                                " ",
+                                output,
+                                width = prompt_len as usize
+                            ));
+                            self.result_lines_buf = res;
                         }
                         Ok(None) => (),
                         Err(err) => {
-                            self.res = vec![
-                                self.prompt.clone() + &self.history.last().unwrap(),
-                                format!("  => Error: {}", err),
+                            let mut res = vec![
+                                self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
+                                    + self.command_history.last().unwrap(),
                             ];
+                            res.extend(
+                                format!("{:width$}=> {}", " ", err, width = prompt_len as usize)
+                                    .lines()
+                                    .map(|s| s.to_string()),
+                            );
+                            self.result_lines_buf = res;
                         }
                     }
+                    execute!(
+                        stdout,
+                        cursor::Hide,
+                        MoveUp(self.prompt.len() as u16),
+                        Clear(ClearType::FromCursorDown),
+                    )
+                    .unwrap();
+                    disable_raw_mode().unwrap();
+                    println!("");
+                    for line in self.result_lines_buf.iter() {
+                        println!("{}", line);
+                        execute!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
+                    }
+                    println!("");
+                    for (idx, line) in self.prompt.iter().enumerate() {
+                        if idx == self.prompt.len() - 1 {
+                            print!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
+                            stdout.flush().unwrap();
+                        } else {
+                            println!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
+                        }
+                    }
+                    enable_raw_mode().unwrap();
                 }
                 _ => {}
             }
         }
         execute!(
             stdout,
-            cursor::MoveDown(2),
+            cursor::MoveUp((self.prompt.len()).checked_sub(1).unwrap_or(0) as u16),
             MoveToColumn(0),
-            Print(""),
+            Clear(ClearType::FromCursorDown),
             Show
         )
         .unwrap();
@@ -213,9 +393,9 @@ impl<'a> Repl<'a> {
             INPUT = str;
         }
         let lexer = Lexer::from_iter(unsafe { INPUT.chars() }.peekable());
-        let mut runner = self.state.rebuild(lexer);
+        let mut runner = self.context.rebuild(lexer);
         let out = runner.run_cmd()?;
-        self.state = runner;
+        self.context = runner;
         return Ok(out);
     }
 }

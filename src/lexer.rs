@@ -2,19 +2,21 @@ use std::{iter::Peekable, str::Chars};
 
 crate::token_kinds! {
     Sym,
+    Comment,
     OpenParen = "(",
     CloseParen = ")",
     Comma = ",",
     Equals = "=",
     Semicolon = ";",
-    Done = "done",
-    Shape = "shape",
-    Rule = "rule",
-    Apply = "apply",
     All = "all",
-    Undo = "undo",
-    Redo = "redo",
-    Help = "help",
+    Done = "done" command,
+    Shape = "shape" command,
+    Rule = "rule" command,
+    Apply = "apply" command,
+    Undo = "undo" command,
+    Redo = "redo" command,
+    Help = "help" command,
+    Quit = "quit" command,
 }
 
 #[derive(Debug)]
@@ -41,20 +43,6 @@ impl<'a> Lexer<'a> {
             text: String::new(),
         }
     }
-
-    pub fn is_done(&mut self) -> bool {
-        if let Some(c) = self.chars.peek() {
-            if c.is_whitespace() {
-                if self.chars.next().is_none() {
-                    return true;
-                }
-                return self.is_done();
-            }
-            return false;
-        } else {
-            return true;
-        }
-    }
 }
 
 impl<'a> From<&'a str> for Lexer<'a> {
@@ -64,12 +52,42 @@ impl<'a> From<&'a str> for Lexer<'a> {
 }
 
 #[macro_export]
+macro_rules! count {
+    () => (0usize);
+    ( $x:tt $($xs:tt)* ) => (1usize + crate::count!($($xs)*));
+}
+
+#[macro_export]
+macro_rules! ignore {
+    ($first:ident, $last:expr) => {
+        $last
+    };
+}
+
+#[macro_export]
+macro_rules! commands {
+    () => {
+        crate::lexer::COMMANDS.join(", ")
+    };
+}
+
+#[macro_export]
 macro_rules! token_kinds {
-    ($($kind:ident$(= $val:literal)?),+$(,)?) => {
+    ($($kind:ident$(= $val:literal $($kw:ident)?)?),+$(,)?) => {
         #[derive(Debug, PartialEq)]
         pub enum TokenKind {
             $($kind),+
         }
+
+        pub const COMMANDS: [&str; crate::count!($($($($kw)?)?)+)] = [
+            $(
+                $(
+                    $(
+                        crate::ignore!($kw,  casey::lower!(stringify!($val))),
+                    )?
+                )?
+            )+
+        ];
 
         impl<'a> Iterator for Lexer<'a> {
             type Item = Token;
@@ -86,6 +104,14 @@ macro_rules! token_kinds {
                             let c = c.chars().nth(0).unwrap();
                             if !c.is_alphanumeric() {
                                 return None;
+                            }
+
+                            if c == '#' {
+                                text.pop();
+                                while let Some(_) = self.chars.next_if(|x| *x != '\n') {
+                                    text.push(c);
+                                }
+                                return Some(Token::new(Comment, text));
                             }
 
                             while let Some(c) = self
