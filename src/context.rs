@@ -1,26 +1,33 @@
-use std::iter::Peekable;
+use std::{
+    fs::{self, File},
+    iter::Peekable,
+    rc::Rc,
+};
 
 use crate::{
-    lexer::{self, Lexer, Token},
-    rule::{self, Expr, Rule},
+    expr::{self, Expr},
+    lexer::{self, CommandKind, Lexer, StrategyKind, Token, TokenKind},
+    rule::{ApplyAll, ApplyDeep, ApplyFirst, Rule},
 };
 use anyhow::Result;
 use crossterm::style::Stylize;
 use linked_hash_map::LinkedHashMap;
 
-pub struct Context<'a> {
-    pub lexer: Peekable<lexer::Lexer<'a>>,
+pub struct Context {
     rules: LinkedHashMap<String, Rule>,
     apply_history: Vec<Expr>,
     undo_history: Vec<Expr>,
     shape: Option<Expr>,
     pub quit: bool,
+    pub quiet: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
     #[error("Invalid command {0}. Expected one of {}", crate::commands!())]
     InvalidCommand(String),
+    #[error("Invalid strategy {0}. Expected one of {}", crate::strategies!())]
+    InvalidStrategy(String),
     #[error("Expected rule name")]
     ExpectedRuleName,
     #[error("No rule named {0}")]
@@ -40,27 +47,31 @@ enum Error {
 }
 use crate::context::Error::*;
 
-impl<'a> Context<'a> {
-    pub fn new(lexer: Lexer<'a>) -> Self {
+impl Context {
+    pub fn new() -> Self {
         Self {
-            lexer: lexer.peekable(),
             rules: LinkedHashMap::new(),
             apply_history: Vec::new(),
             undo_history: Vec::new(),
             shape: None,
+            quiet: false,
             quit: false,
         }
     }
 
-    pub fn rebuild(&self, lexer: Lexer<'a>) -> Self {
+    pub fn rebuild(&self, lexer: &Lexer<impl Iterator<Item = char>>) -> Self {
         Self {
-            lexer: lexer.peekable(),
             quit: false,
             rules: self.rules.clone(),
             apply_history: self.apply_history.clone(),
             undo_history: self.undo_history.clone(),
             shape: self.shape.clone(),
+            quiet: self.quiet,
         }
+    }
+
+    pub fn set_quiet(&mut self, quiet: bool) {
+        self.quiet = quiet;
     }
 
     pub fn show_shape(&self) -> Result<String> {
@@ -71,53 +82,70 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn run_cmd(&mut self) -> Result<Option<String>> {
-        let mut lexer = &mut self.lexer;
+    pub fn step(
+        &mut self,
+        mut lexer: &mut Lexer<impl Iterator<Item = char>>,
+    ) -> Result<Option<String>> {
+        use TokenKind::*;
         match lexer.next() {
             Some(lexer::Token {
-                kind: lexer::TokenKind::Rule,
+                kind: Command(CommandKind::Rule),
                 ..
             }) => {
                 let Some(Token {
-                    kind: lexer::TokenKind::Sym,
+                    kind: TokenKind::Ident,
                     text: name,
                 }) = lexer.next() else {
                     return Err(ExpectedRuleName.into());
                 };
-                self.rules.insert(name, Rule::parse(&mut lexer)?);
-                Ok(None)
+                self.rules.insert(name.clone(), Rule::parse(&mut lexer)?);
+                if self.quiet {
+                    Ok(None)
+                } else {
+                    Ok(Some(format!("Rule {} defined", name.yellow())))
+                }
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Apply,
+                kind: Command(CommandKind::Apply),
                 ..
             }) => {
                 if let Some(shape) = &mut self.shape {
-                    match lexer.next() {
+                    let (strategy, strat_name) = match lexer.next() {
                         Some(lexer::Token {
-                            kind: lexer::TokenKind::Rule,
+                            kind: TokenKind::Strategy(strategy),
+                            text,
+                        }) => (strategy, text),
+                        Some(invalid) => {
+                            return Err(InvalidStrategy(invalid.text).into());
+                        }
+                        None => {
+                            return Err(UnexpectedEOF.into());
+                        }
+                    };
+
+                    let rule = match lexer.next() {
+                        Some(lexer::Token {
+                            kind: TokenKind::Command(CommandKind::Rule),
                             ..
-                        }) => {
-                            self.apply_history.push(std::mem::replace(
-                                shape,
-                                rule::Rule::parse(&mut lexer)?.apply_all(&shape)?,
-                            ));
-                        }
+                        }) => Rule::parse(&mut lexer)?,
                         Some(lexer::Token {
-                            kind: lexer::TokenKind::Sym,
+                            kind: TokenKind::Ident,
                             text: name,
-                        }) => {
-                            self.apply_history.push(std::mem::replace(
-                                shape,
-                                self.rules
-                                    .get(&name)
-                                    .ok_or(RuleDoesNotExist(name))?
-                                    .apply_all(&shape)?,
-                            ));
-                        }
+                        }) => self.rules.get(&name).ok_or(RuleDoesNotExist(name))?.clone(),
                         _ => {
                             return Err(ExpectedRuleExprOrAnon.into());
                         }
-                    }
+                    };
+                    self.apply_history.push(std::mem::replace(
+                        shape,
+                        match strategy {
+                            StrategyKind::All => rule.apply(&shape, &mut ApplyAll),
+                            StrategyKind::First => rule.apply(&shape, &mut ApplyFirst),
+                            StrategyKind::Deep => rule.apply(&shape, &mut ApplyDeep),
+                            #[allow(unreachable_patterns)]
+                            _ => return Err(InvalidStrategy(strat_name).into()),
+                        },
+                    ));
 
                     Ok(Some(format!("{}", self.shape.clone().unwrap())))
                 } else {
@@ -125,25 +153,17 @@ impl<'a> Context<'a> {
                 }
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Shape,
+                kind: TokenKind::Command(CommandKind::Shape),
                 ..
             }) => {
-                if let Some(_) = lexer.peek() {
-                    if self.shape.is_some() {
-                        return Err(AlreadyShaping.into());
-                    }
-                    self.shape = Some(rule::Expr::parse(&mut lexer)?);
-                    Ok(Some(format!("{}", self.shape.clone().unwrap())))
-                } else {
-                    if let Some(shape) = &self.shape {
-                        return Ok(Some(format!("{}", shape)));
-                    } else {
-                        return Err(NoShape.into());
-                    }
+                if self.shape.is_some() {
+                    return Err(AlreadyShaping.into());
                 }
+                self.shape = Some(expr::Expr::parse(lexer)?);
+                Ok(Some(format!("{}", self.shape.clone().unwrap())))
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Done,
+                kind: TokenKind::Command(CommandKind::Done),
                 ..
             }) => {
                 if let Some(shape) = &self.shape {
@@ -159,7 +179,7 @@ impl<'a> Context<'a> {
                 }
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Undo,
+                kind: TokenKind::Command(CommandKind::Undo),
                 ..
             }) => {
                 if let Some(shape) = self.apply_history.pop() {
@@ -171,7 +191,7 @@ impl<'a> Context<'a> {
                 }
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Redo,
+                kind: TokenKind::Command(CommandKind::Redo),
                 ..
             }) => {
                 if let Some(shape) = self.undo_history.pop() {
@@ -183,11 +203,11 @@ impl<'a> Context<'a> {
                 }
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Help,
+                kind: TokenKind::Command(CommandKind::Help),
                 ..
             }) => {
-                let color = |s: &'a str| s.dark_cyan().bold();
-                let underline = |s: &'a str| s.underlined();
+                let color = |s: &'static str| s.dark_cyan().bold();
+                let underline = |s: &'static str| s.underlined();
                 Ok(Some(format!(
                     "Commands:
          {rule} {rule_name} <rule>; - define a rule
@@ -223,12 +243,44 @@ impl<'a> Context<'a> {
                 )))
             }
             Some(lexer::Token {
-                kind: lexer::TokenKind::Quit,
+                kind: TokenKind::Command(CommandKind::Quit),
                 ..
             }) => {
                 self.quit = true;
                 Ok(None)
             }
+            Some(lexer::Token {
+                kind: TokenKind::Comment,
+                ..
+            }) => Ok(None),
+            Some(lexer::Token {
+                kind: TokenKind::Command(CommandKind::Load),
+                text,
+            }) => {
+                let file = match lexer.next() {
+                    Some(t) => match t {
+                        lexer::Token {
+                            kind: TokenKind::Ident,
+                            text,
+                        } => text,
+                        _ => return Err(InvalidCommand(format!("{}", text.red().bold())).into()),
+                    },
+                    None => return Err(UnexpectedEOF.into()),
+                };
+                let contents = fs::read_to_string(&file)
+                    .map_err(|e| anyhow::anyhow!("{}: {}", file, e.to_string().red().bold()))?;
+                let mut lexer = lexer::Lexer::new(contents.chars().peekable());
+                while !lexer.exhausted {
+                    self.step(&mut lexer)?;
+                }
+                self.rebuild(&lexer);
+
+                Ok(None)
+            }
+            Some(lexer::Token {
+                kind: TokenKind::Eof,
+                ..
+            }) => Ok(None),
             Some(invalid) => Err(InvalidCommand(format!("{}", invalid.text.red().bold())).into()),
             None => Err(UnexpectedEOF.into()),
         }

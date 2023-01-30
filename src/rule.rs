@@ -1,12 +1,17 @@
-use std::{fmt::Display, iter::Peekable};
+use std::{collections::HashMap, fmt::Display, iter::Peekable};
 
+use crate::{
+    expr::Expr,
+    lexer::{Lexer, Token, TokenKind},
+};
 use anyhow::{bail, Result};
 use thiserror::Error;
 
-use crate::{
-    bindings::{pattern_match, substitute_bindings},
-    lexer::{Token, TokenKind},
-};
+pub(crate) type Bindings = HashMap<String, Expr>;
+
+#[derive(Debug, Error)]
+#[error("Match error: {0}")]
+pub struct MatchError<'a>(&'a str);
 
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
@@ -15,47 +20,77 @@ pub(crate) struct Rule {
 }
 
 impl Rule {
-    pub fn parse(lexer: impl Iterator<Item = Token>) -> Result<Self> {
-        let mut lexer = lexer.peekable();
-        let head = Expr::parse_peekable(&mut lexer)?;
+    pub fn parse(mut lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
+        let head = Expr::parse(&mut lexer)?;
         lexer.next_if(|t| t.kind == TokenKind::Equals).unwrap();
-        let body = Expr::parse_peekable(&mut lexer)?;
-        match lexer.peek() {
-            Some(t) => match t.kind {
-                TokenKind::Semicolon => {
-                    lexer.next();
-                }
-                _ => bail!("Expected semicolon, got {:?}", t),
-            },
-            None => {}
-        };
+        let body = Expr::parse(&mut lexer)?;
         Ok(Self { head, body })
     }
 }
 
 impl Rule {
-    pub fn apply_all(&self, expr: &Expr) -> Result<Expr> {
-        Ok(if let Some(bindings) = pattern_match(&self.head, expr) {
-            substitute_bindings(&bindings, &self.body)?
-        } else {
+    pub fn apply(&self, expr: &Expr, strategy: &mut impl Strategy) -> Expr {
+        fn apply_to_subexprs(
+            rule: &Rule,
+            expr: &Expr,
+            strategy: &mut impl Strategy,
+        ) -> (Expr, bool) {
             use Expr::*;
             match expr {
-                Sym(_) | Var(_) => expr.clone(),
-                Fun(head, args) => Expr::Fun(
-                    box self.apply_all(head)?,
-                    args.iter()
-                        .map(|arg| self.apply_all(arg))
-                        .collect::<Result<_, _>>()?,
-                ),
+                Sym(_) | Var(_) => (expr.clone(), false),
+                Op(op, lhs, rhs) => {
+                    let (lhs, halt) = apply_impl(rule, lhs, strategy);
+                    if halt {
+                        return (Op(op.clone(), box lhs, rhs.clone()), true);
+                    }
+                    let (rhs, halt) = apply_impl(rule, rhs, strategy);
+                    (Op(op.clone(), box lhs, box rhs), halt)
+                }
+                Fun(head, args) => {
+                    let (head, halt) = apply_impl(rule, head, strategy);
+                    if halt {
+                        return (Fun(box head, args.clone()), true);
+                    }
+                    let mut new_args = vec![];
+                    let mut halt = false;
+                    for arg in args {
+                        if halt {
+                            new_args.push(arg.clone());
+                        } else {
+                            let (arg, arg_halt) = apply_impl(rule, arg, strategy);
+                            new_args.push(arg);
+                            halt = arg_halt;
+                        }
+                    }
+                    (Fun(box head, new_args), halt)
+                }
             }
-        })
+        }
+
+        fn apply_impl(rule: &Rule, expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
+            if let Some(bindings) = pattern_match(&rule.head, expr) {
+                let resolution = strategy.matched();
+                let res = match resolution.action {
+                    Action::Apply => substitute_bindings(&bindings, &rule.body),
+                    Action::Skip => expr.clone(),
+                };
+                match resolution.state {
+                    State::Bail => (res, false),
+                    State::Halt => (res, true),
+                    State::Cont => apply_to_subexprs(rule, expr, strategy),
+                }
+            } else {
+                apply_to_subexprs(rule, expr, strategy)
+            }
+        }
+        apply_impl(self, expr, strategy).0
     }
 }
 
 impl TryFrom<&str> for Rule {
     type Error = anyhow::Error;
     fn try_from(s: &str) -> Result<Self> {
-        Rule::parse(crate::lexer::Lexer::from_iter(s.chars().peekable()))
+        Rule::parse(&mut crate::lexer::Lexer::new(s.chars().peekable()))
     }
 }
 
@@ -65,91 +100,117 @@ impl Display for Rule {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Expr {
-    Sym(String),
-    Var(String),
-    Fun(Box<Expr>, Vec<Expr>),
+pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
+    match expr {
+        Expr::Sym(_) => expr.clone(),
+        Expr::Op(op, l, r) => Expr::Op(
+            op.clone(),
+            box substitute_bindings(bindings, l),
+            box substitute_bindings(bindings, r),
+        ),
+        Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
+        Expr::Fun(head, args) => Expr::Fun(
+            box substitute_bindings(bindings, head),
+            args.iter()
+                .map(|arg| substitute_bindings(bindings, arg))
+                .collect::<Vec<_>>(),
+        ),
+    }
 }
 
-#[derive(Debug, Error)]
-#[error("Parse error: {0}")]
-pub struct ParseError(String);
-
-impl Expr {
-    fn var_or_sym(name: &str) -> Result<Expr> {
-        if name.is_empty() {
-            bail!("Empty symbol name")
-        }
-        Ok(name
-            .chars()
-            .nth(0)
-            .filter(|c| c.is_uppercase())
-            .map(|_| Expr::Var(name.to_owned()))
-            .unwrap_or(Expr::Sym(name.to_owned())))
-    }
-
-    fn parse_peekable(lexer: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Self> {
-        if let Some(name) = lexer.next() {
-            if let Token {
-                kind: TokenKind::Sym,
-                ..
-            } = &name
-            {
-                if let Some(_) = lexer.next_if(|t| t.kind == TokenKind::OpenParen) {
-                    let mut args = Vec::new();
-                    if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_some() {
-                        return Ok(Expr::Fun(box Self::var_or_sym(&name.text)?, args));
-                    }
-                    args.push(Self::parse_peekable(lexer)?);
-                    while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
-                        args.push(Self::parse_peekable(lexer)?);
-                    }
-                    if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                        return Err(ParseError("Expected ')'".to_string()).into());
-                    }
-                    Ok(Expr::Fun(box Self::var_or_sym(&name.text)?, args))
+pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
+    fn matches(pattern: &Expr, value: &Expr, bindings: &mut Bindings) -> bool {
+        use Expr::*;
+        match (pattern, value) {
+            (Sym(name1), Sym(name2)) => name1 == name2,
+            (Var(name), _) => {
+                if name == "_" {
+                    true
+                } else if let Some(existing) = bindings.get(name) {
+                    existing == value
                 } else {
-                    Self::var_or_sym(&name.text)
+                    bindings.insert(name.clone(), value.clone());
+                    true
                 }
-            } else {
-                return Err(ParseError(format!(
-                    "Expected symbol, found {:?}",
-                    lexer.peek().unwrap()
-                ))
-                .into());
             }
-        } else {
-            return Err(ParseError("Expected symbol, found EOF".to_string()).into());
+            (Op(opl, l1, r1), Op(opr, l2, r2)) => {
+                opl == opr && matches(l1, l2, bindings) && matches(r1, r2, bindings)
+            }
+            (Fun(pat_name, pat_args), Expr::Fun(val_name, val_args)) => {
+                if matches(pat_name, val_name, bindings) && pat_args.len() == val_args.len() {
+                    pat_args
+                        .iter()
+                        .zip(val_args.iter())
+                        .all(|(pat_arg, val_arg)| matches(pat_arg, val_arg, bindings))
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
     }
 
-    pub fn parse(lexer: impl Iterator<Item = Token>) -> Result<Self> {
-        Self::parse_peekable(&mut lexer.peekable())
+    let mut bindings = Bindings::new();
+
+    if matches(pattern, value, &mut bindings) {
+        Some(bindings)
+    } else {
+        None
     }
 }
 
-impl TryFrom<&str> for Expr {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self> {
-        Expr::parse(crate::lexer::Lexer::from_iter(s.chars().peekable()))
+pub enum Action {
+    #[allow(dead_code)]
+    Skip,
+    Apply,
+}
+
+pub enum State {
+    /// Stop the current recursion branch and try other braunches
+    Bail,
+    /// Continue applying the rule to the result of the application
+    Cont,
+    /// Completely stop the application process
+    Halt,
+}
+
+pub struct Resolution {
+    action: Action,
+    state: State,
+}
+
+pub trait Strategy {
+    fn matched(&mut self) -> Resolution;
+}
+
+// Strategies
+pub struct ApplyAll;
+pub struct ApplyFirst;
+pub struct ApplyDeep;
+
+impl Strategy for ApplyAll {
+    fn matched(&mut self) -> Resolution {
+        Resolution {
+            action: Action::Apply,
+            state: State::Bail,
+        }
     }
 }
 
-impl Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
-            Expr::Fun(name, args) => {
-                write!(f, "{}(", name)?;
-                for (idx, arg) in args.iter().enumerate() {
-                    if idx > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", arg)?;
-                }
-                write!(f, ")")
-            }
+impl Strategy for ApplyFirst {
+    fn matched(&mut self) -> Resolution {
+        Resolution {
+            action: Action::Apply,
+            state: State::Halt,
+        }
+    }
+}
+
+impl Strategy for ApplyDeep {
+    fn matched(&mut self) -> Resolution {
+        Resolution {
+            action: Action::Apply,
+            state: State::Cont,
         }
     }
 }

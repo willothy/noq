@@ -3,10 +3,10 @@
 
 use std::env::args;
 
-use self::context::Context;
+use self::{context::Context, lexer::Lexer};
 
-mod bindings;
 mod context;
+mod expr;
 mod lexer;
 mod repl;
 mod rule;
@@ -46,13 +46,13 @@ macro_rules! expr {
     };
     ($name:ident) => {
         if stringify!($name).chars().nth(0).unwrap().is_uppercase() {
-            crate::rule::Expr::Var(stringify!($name).to_string())
+            crate::expr::Expr::Var(stringify!($name).to_string())
         } else {
-            crate::rule::Expr::Sym(stringify!($name).to_string())
+            crate::expr::Expr::Sym(stringify!($name).to_string())
         }
     };
     ($name:ident($($args:tt)*)) => {
-        crate::rule::Expr::Fun(box expr!($name), fun_args!( $($args)* ))
+        crate::expr::Expr::Fun(box expr!($name), fun_args!( $($args)* ))
     };
 }
 
@@ -99,10 +99,19 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(file) = args().nth(1) {
         let source = std::fs::read_to_string(file).unwrap();
-        let mut runner = Context::new(lexer::Lexer::from_iter(source.chars().peekable()));
+        let mut lexer = Lexer::new(source.chars().peekable());
+        let mut lexer2 = Lexer::new(source.chars().peekable());
+        loop {
+            let tok = lexer2.next_if(|_| true);
+            println!("{:?}", tok);
+            if lexer2.exhausted {
+                break;
+            }
+        }
+        let mut runner = Context::new();
 
-        while !runner.lexer.peek().is_none() {
-            match runner.run_cmd() {
+        while !lexer.exhausted {
+            match runner.step(&mut lexer) {
                 Ok(Some(output)) => println!(" => {}", output),
                 Ok(None) => (),
                 Err(e) => {

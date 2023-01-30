@@ -18,7 +18,7 @@ use crate::{
     lexer::{self, Lexer},
 };
 
-pub struct Repl<'a> {
+pub struct Repl {
     prompt: Vec<String>,
     input_buf: String,
     result_lines_buf: Vec<String>,
@@ -26,7 +26,7 @@ pub struct Repl<'a> {
     history_index: usize,
     insert: usize,
     quit: bool,
-    context: Context<'a>,
+    context: Context,
 }
 
 #[derive(Debug, Error)]
@@ -61,7 +61,7 @@ impl Highlight for String {
                 Some((idx, '#')) => {
                     if !word.is_empty() {
                         for command in lexer::COMMANDS {
-                            if word.trim() == &command[1..command.len() - 1] {
+                            if word.trim() == command {
                                 let word = word.drain(..).collect::<String>();
                                 highlights.insert(start, (Command, word));
                             }
@@ -95,7 +95,7 @@ impl Highlight for String {
                         word.push(c);
                     } else {
                         for command in lexer::COMMANDS {
-                            if word.trim() == &command[1..command.len() - 1] {
+                            if word.trim() == command {
                                 let word = word.drain(..).collect::<String>();
                                 highlights.insert(start, (Command, word));
                             }
@@ -107,7 +107,7 @@ impl Highlight for String {
                 None => {
                     if !word.is_empty() {
                         for command in lexer::COMMANDS {
-                            if word.trim() == &command[1..command.len() - 1] {
+                            if word.trim() == command {
                                 let word = word.drain(..).collect::<String>();
                                 highlights.insert(start, (Command, word));
                             }
@@ -144,7 +144,7 @@ impl Highlight for String {
     }
 }
 
-impl<'a> Repl<'a> {
+impl Repl {
     pub fn run() {
         let mut repl = Repl {
             prompt: std::env::var("NOQ")
@@ -176,9 +176,9 @@ impl<'a> Repl<'a> {
             command_history: Vec::new(),
             history_index: 0,
             quit: false,
-            context: Context::new(Lexer::from_iter("".chars().peekable())),
+            context: Context::new(),
         };
-
+        repl.context.quiet = false;
         repl.run_loop();
     }
 
@@ -332,7 +332,9 @@ impl<'a> Repl<'a> {
                             ));
                             self.result_lines_buf = res;
                         }
-                        Ok(None) => (),
+                        Ok(None) => {
+                            self.result_lines_buf = vec![];
+                        }
                         Err(err) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
@@ -389,9 +391,9 @@ impl<'a> Repl<'a> {
         unsafe {
             INPUT = str;
         }
-        let lexer = Lexer::from_iter(unsafe { INPUT.chars() }.peekable());
-        let mut runner = self.context.rebuild(lexer);
-        let out = runner.run_cmd()?;
+        let mut lexer = Lexer::new(unsafe { INPUT.chars() }.peekable());
+        let mut runner = self.context.rebuild(&lexer);
+        let out = runner.step(&mut lexer)?;
         self.context = runner;
         return Ok(out);
     }

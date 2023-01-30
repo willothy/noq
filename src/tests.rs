@@ -1,7 +1,7 @@
 #![cfg(test)]
 use std::collections::HashMap;
 
-use crate::{bindings::*, *};
+use crate::{rule::*, *};
 
 #[test]
 fn rule_apply_all() {
@@ -11,7 +11,7 @@ fn rule_apply_all() {
 
     let expected = expr!(foo(pair(g(b), f(a)), pair(z(d), q(c))));
 
-    let actual = swap.apply_all(&input).unwrap();
+    let actual = swap.apply(&input, &mut ApplyAll);
 
     assert_eq!(actual, expected);
 }
