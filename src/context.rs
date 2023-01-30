@@ -152,7 +152,7 @@ impl<'a> Context<'a> {
                     Ok(Some(format!(
                         "{} {}",
                         shape.to_string().green(),
-                        "\u{2714}\n".green().bold()
+                        "\u{2714}".green().bold()
                     )))
                 } else {
                     Err(NoShape.into())

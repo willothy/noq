@@ -14,7 +14,6 @@ use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    commands,
     context::Context,
     lexer::{self, Lexer},
 };
@@ -29,8 +28,6 @@ pub struct Repl<'a> {
     quit: bool,
     context: Context<'a>,
 }
-
-const DEFAULT_PROMPT: &str = "noq > ";
 
 #[derive(Debug, Error)]
 #[error("Error: {0}")]
@@ -47,8 +44,6 @@ pub trait Highlight {
 pub enum HighlightKind {
     Command,
     Comment,
-    Num,
-    Str,
 }
 
 impl Highlight for String {
@@ -137,8 +132,8 @@ impl Highlight for String {
                 let hl = match kind {
                     Command => hl.clone().blue().to_string(),
                     Comment => hl.clone().yellow().to_string(),
-                    Num => hl.clone().yellow().to_string(),
-                    Str => hl.clone().red().to_string(),
+                    //Num => hl.clone().yellow().to_string(),
+                    //Str => hl.clone().red().to_string(),
                 };
                 res.push_str(&hl)
             } else {
@@ -170,8 +165,8 @@ impl<'a> Repl<'a> {
                 })
                 .map(|v| v.replace("\\w", std::env::current_dir().unwrap().to_str().unwrap()))
                 .map(|v| v.replace("\\$", "$"))
-                .map(|v| snailquote::unescape(&v).unwrap())
-                .unwrap_or_else(|_| DEFAULT_PROMPT.to_string())
+                //.map(|v| snailquote::unescape(&v).unwrap())
+                .unwrap_or_else(|_| "noq >".to_string())
                 .lines()
                 .map(|s| s.to_string())
                 .collect(),
@@ -216,9 +211,9 @@ impl<'a> Repl<'a> {
                 continue;
             }
 
-            let stripped = strip(self.prompt.last().unwrap()).unwrap();
+            let stripped = strip(self.prompt.last().unwrap().trim()).unwrap();
             let input_line = String::from_utf8_lossy(&stripped);
-            let prompt_len = input_line.trim_end().len() as u16 + 1;
+            let prompt_len = input_line.chars().count() as u16 + 1;
             execute!(
                 stdout,
                 MoveToColumn(prompt_len),
@@ -326,6 +321,7 @@ impl<'a> Repl<'a> {
                         Ok(Some(output)) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
+                                    + " "
                                     + self.command_history.last().unwrap(),
                             ];
                             res.push(format!(
@@ -340,6 +336,7 @@ impl<'a> Repl<'a> {
                         Err(err) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
+                                    + " "
                                     + self.command_history.last().unwrap(),
                             ];
                             res.extend(
@@ -360,7 +357,7 @@ impl<'a> Repl<'a> {
                     disable_raw_mode().unwrap();
                     println!("");
                     for line in self.result_lines_buf.iter() {
-                        println!("{}", line);
+                        println!("{}", line.highlight());
                         execute!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
                     }
                     println!("");
