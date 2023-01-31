@@ -1,7 +1,8 @@
 #![feature(box_syntax)]
 #![feature(panic_info_message)]
+#![feature(try_trait_v2)]
 
-use std::env::args;
+use std::{env::args, path::PathBuf};
 
 use crossterm::execute;
 
@@ -103,8 +104,10 @@ fn main() -> anyhow::Result<()> {
     }));
 
     if let Some(file) = args().nth(1) {
-        let source = std::fs::read_to_string(file).unwrap();
-        let mut lexer = Lexer::new(source.chars().peekable());
+        let path = PathBuf::from(file);
+        let source = std::fs::read_to_string(&path).unwrap();
+        let mut lexer = Lexer::new(source.chars().peekable())
+            .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
         let mut context = Runtime::new();
 
         while !lexer.exhausted {

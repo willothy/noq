@@ -3,7 +3,7 @@ use std::fmt::Display;
 use anyhow::{bail, Result};
 use thiserror::Error;
 
-use crate::lexer::{Lexer, OpKind, Token, TokenKind, MAX_PRECEDENCE};
+use crate::lexer::{Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
@@ -33,7 +33,11 @@ impl Expr {
     fn parse_fun_args(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Self>> {
         use TokenKind::*;
         if lexer.next_if(|tok| tok.kind == OpenParen).is_none() {
-            return Err(ParseError(format!("Expected '(', got {:?}", lexer.next())).into());
+            return Err(ParseError(format!(
+                "Expected '(', got {}",
+                lexer.next().unwrap_string()
+            ))
+            .into());
         }
         let mut args = Vec::new();
         if lexer.next_if(|tok| tok.kind == CloseParen).is_some() {
@@ -44,7 +48,11 @@ impl Expr {
             args.push(Self::parse(lexer)?);
         }
         if lexer.next_if(|tok| tok.kind == CloseParen).is_none() {
-            return Err(ParseError(format!("Expected ')', got {:?}", lexer.next())).into());
+            return Err(ParseError(format!(
+                "Expected ')', got {}",
+                lexer.next().unwrap_string()
+            ))
+            .into());
         }
         Ok(args)
     }
@@ -58,17 +66,20 @@ impl Expr {
                 } => {
                     let result = Self::parse(lexer)?;
                     if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                        return Err(
-                            ParseError(format!("Expected ')', got {:?}", lexer.next())).into()
-                        );
+                        return Err(ParseError(format!(
+                            "Expected ')', got {}",
+                            lexer.next().unwrap_string()
+                        ))
+                        .into());
                     }
                     result
                 }
                 Token {
                     kind: TokenKind::Ident,
                     text,
+                    ..
                 } => Self::var_or_sym(&text)?,
-                t => return Err(ParseError(format!("Expected symbol, found {:?}", t)).into()),
+                t => return Err(ParseError(format!("Expected symbol, found {}", t)).into()),
             }
         };
 

@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{fmt::Display, iter::Peekable};
 
 crate::token_kinds! {
     Ident,
@@ -6,6 +6,7 @@ crate::token_kinds! {
     Invalid,
     Eof,
     String,
+    UnclosedStr,
     Path,
     //Number,
     Rules = "rules",
@@ -50,11 +51,82 @@ crate::token_kinds! {
 pub struct Token {
     pub kind: TokenKind,
     pub text: String,
+    pub loc: Loc,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            TokenKind::Eof => write!(f, "EOF"),
+            TokenKind::Invalid => write!(f, "Invalid ({})", self.text),
+            TokenKind::Comment => write!(f, "Comment ({})", self.text),
+            TokenKind::Strategy(_) => write!(f, "Strategy ({})", self.text),
+            TokenKind::Op(_) => write!(f, "Op ({})", self.text),
+            TokenKind::Command(_) => write!(f, "Command ({})", self.text),
+            _ => write!(f, "'{}'", self.text),
+        }
+    }
+}
+
+pub trait StringUnwrap {
+    fn unwrap_string(self) -> String;
+}
+
+impl<T> StringUnwrap for Option<T>
+where
+    T: Display,
+{
+    fn unwrap_string(self) -> String {
+        match self {
+            Some(t) => format!("{}", t),
+            None => "EOF".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Loc {
+    pub file: Option<String>,
+    pub line: usize,
+    pub col: usize,
+    pub offset: usize,
+}
+
+impl Loc {
+    pub fn prev_col(&self) -> Self {
+        Self {
+            file: self.file.clone(),
+            line: self.line,
+            col: if self.col > 1 { self.col - 1 } else { 1 },
+            offset: if self.offset > 0 { self.offset - 1 } else { 0 },
+        }
+    }
+}
+
+impl Default for Loc {
+    fn default() -> Self {
+        Self {
+            file: None,
+            line: 1,
+            col: 1,
+            offset: 0,
+        }
+    }
+}
+
+impl std::fmt::Display for Loc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(file) = &self.file {
+            write!(f, "{}:{}:{}", file, self.line, self.col)
+        } else {
+            write!(f, "{}:{}", self.line, self.col)
+        }
+    }
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, text: String) -> Self {
-        Self { kind, text }
+    pub fn new(kind: TokenKind, text: String, loc: Loc) -> Self {
+        Self { kind, text, loc }
     }
 }
 
@@ -63,7 +135,10 @@ pub struct Lexer<T: Iterator<Item = char>> {
     pub peeked: Option<Token>,
     prev: Option<Token>,
     pub exhausted: bool,
-    pub text: String,
+    pub file_name: Option<String>,
+    pub current_line: usize,
+    pub current_col: usize,
+    pub current_offset: usize,
 }
 
 pub trait IsNumeric {
@@ -197,6 +272,13 @@ macro_rules! token_kinds {
             ),+
         ];
 
+        #[allow(dead_code)]
+        pub const KEYWORDS: [&str; 3] = [
+            "rules",
+            "commands",
+            "reverse"
+        ];
+
         impl<T: Iterator<Item = char>> Iterator for Lexer<T> {
             type Item = Token;
 
@@ -217,8 +299,25 @@ macro_rules! token_kinds {
                     peeked: None,
                     prev: None,
                     exhausted: false,
-                    text: String::new(),
+                    file_name: None,
+                    current_line: 1,
+                    current_col: 1,
+                    current_offset: 0
                 }
+            }
+
+            pub fn current_loc(&self) -> Loc {
+                Loc {
+                    line: self.current_line,
+                    col: self.current_col,
+                    file: self.file_name.clone(),
+                    offset: self.current_offset,
+                }
+            }
+
+            pub fn with_file_name(mut self, file_name: String) -> Self {
+                self.file_name = Some(file_name);
+                self
             }
 
             pub fn peek(&mut self) -> &Token {
@@ -245,46 +344,70 @@ macro_rules! token_kinds {
 
             fn next_token_impl(&mut self) -> Token {
                 let mut text = String::new();
-                while let Some(_) = self.chars.next_if(|x| x.is_whitespace()) {}
+                while let Some(whitespace) = self.chars.next_if(|x| x.is_whitespace()) {
+                    if whitespace == '\n' {
+                        self.current_line += 1;
+                        self.current_col = 1;
+                    } else {
+                        self.current_col += 1;
+                    }
+                    self.current_offset += 1;
+                }
+
                 if let Some(c) = self.chars.next() {
+                    let loc = self.current_loc();
                     use TokenKind::*;
                     text.push(c);
+                    self.current_col += 1;
+                    self.current_offset += 1;
                     match c.to_string().as_str() {
-                        $($($val => Token::new($kind, text),)?)+
-                        $($op_val => Token::new(Op(OpKind::$op_kind), text),)+
-                        $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text),)+
-                        $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)?)+
+                        $($($val => Token::new($kind, text, loc),)?)+
+                        $($op_val => Token::new(Op(OpKind::$op_kind), text, loc),)+
+                        $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text, loc),)+
+                        $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text, loc),)?)+
                         c => {
                             let c = c.chars().nth(0).unwrap();
                             if !c.is_alphanumeric() {
                                 if c == '#' {
                                     while let Some(c) = self.chars.next_if(|x| *x != '\n') {
+                                        self.current_offset += 1;
+                                        self.current_col += 1;
                                         text.push(c);
                                     }
-                                    self.prev = Some(Token::new(Comment, text.clone()));
-                                    return Token::new(Comment, text);
+                                    self.prev = Some(Token::new(Comment, text.clone(), loc.clone()));
+                                    return Token::new(Comment, text, loc);
                                 }
                                 if c == '"' {
+                                    text.pop();
                                     while let Some(c) = self.chars.next_if(|x| *x != '"') {
+                                        self.current_offset += 1;
+                                        self.current_col += 1;
                                         text.push(c);
                                     }
-                                    self.prev = Some(Token::new(String, text[1..text.len() - 1].to_string()));
-                                    return Token::new(String, text[1..text.len() - 1].to_string());
+                                    let Some('"') = self.chars.next() else {
+                                        self.prev = Some(Token::new(UnclosedStr, text.clone(), loc.clone()));
+                                        return Token::new(UnclosedStr, text, loc);
+                                    };
+                                    self.prev = Some(Token::new(String, text.to_string(), loc.clone()));
+                                    return Token::new(String, text.to_string(), loc);
                                 }
                                 if c == '@' {
                                     while let Some(c) = self.chars.next_if(|x| !x.is_whitespace()) {
+                                        self.current_offset += 1;
+                                        self.current_col += 1;
                                         text.push(c);
                                     }
-                                    self.prev = Some(Token::new(Path, text[1..text.len()].to_string()));
-                                    return Token::new(Path, text[1..text.len()].to_string());
+                                    self.prev = Some(Token::new(Path, text[1..text.len()].to_string(), loc.clone()));
+                                    return Token::new(Path, text[1..text.len()].to_string(), loc);
                                 }
                                 match c {
                                     '.' => {}
                                     _ => {
-                                        self.prev = Some(Token::new(Invalid, c.to_string()));
+                                        self.prev = Some(Token::new(Invalid, c.to_string(), loc.clone()));
                                         return Token {
                                             kind: Invalid,
                                             text: c.to_string(),
+                                            loc
                                         };
                                     }
                                 }
@@ -296,34 +419,38 @@ macro_rules! token_kinds {
                                 .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace())
                             {
                                 text.push(c);
+                                self.current_col += 1;
+                                self.current_offset += 1;
                             }
 
 
                             if text.is_numeric() {
                                 if let Some(prev) = &self.prev {
                                     if prev.kind == Command(CommandKind::Apply) {
-                                        return Token::new(Strategy(StrategyKind::ApplyNth), text);
+                                        return Token::new(Strategy(StrategyKind::ApplyNth), text, loc);
                                     }
                                 }
                                 //return Token::new(Number, text);
                             }
 
                             let token = match text.as_str() {
-                                $($($val => Token::new($kind, text),)?)+
-                                $($op_val => Token::new(Op(OpKind::$op_kind), text),)+
-                                $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text),)+
-                                $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)?)+
-                                _ => Token::new(Ident, text),
+                                $($($val => Token::new($kind, text, loc),)?)+
+                                $($op_val => Token::new(Op(OpKind::$op_kind), text, loc),)+
+                                $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text, loc),)+
+                                $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text, loc),)?)+
+                                _ => Token::new(Ident, text, loc),
                             };
                             self.prev = Some(token.clone());
                             token
                         }
                     }
                 } else {
+                    let loc = self.current_loc();
                     self.exhausted = true;
                     Token {
                         kind: TokenKind::Eof,
                         text: String::new(),
+                        loc
                     }
                 }
             }

@@ -1,22 +1,3 @@
-#rule swap swap(X(A, B)) = X(B, A);
-#rule rot rot(triple(A, B, C)) = triple(C, A, B);
-#
-#shape swap(pair(f(a), g(b)))
-#    apply swap
-#    apply rule pair(A, B) = rot(triple(A, B, c));
-#    apply rot
-#done
-#
-#rule add0 add(0, X) = X;
-#
-#rule add add(s(A), B) = s(add(A, B));
-#
-#shape add(s(s(0)), s(s(s(0))))
-#    apply add
-#    apply add
-#    apply add0
-#done
-
 rule square A^2 = A*A
 rule dist_mul_add A*(B + C) = A*B + A*C
 rule mul_comm A*B = B*A

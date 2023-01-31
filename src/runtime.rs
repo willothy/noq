@@ -1,13 +1,16 @@
 use std::{
+    convert::Infallible,
     env,
+    fmt::Display,
     fs::{self, OpenOptions},
     io::{BufWriter, Write},
+    ops::{FromResidual, Try},
     path::PathBuf,
 };
 
 use crate::{
     expr::{self, Expr},
-    lexer::{self, CommandKind, Lexer, StrategyKind, Token, TokenKind},
+    lexer::{self, CommandKind, Lexer, Loc, StrategyKind, Token, TokenKind},
     rule::{ApplyAll, ApplyCheck, ApplyDeep, ApplyFirst, ApplyNth, Rule, Strategy},
 };
 use anyhow::Result;
@@ -25,10 +28,32 @@ pub struct Runtime {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum Error {
-    #[error("Invalid command {0}. Expected one of {}", crate::commands!())]
+//#[error("[{location}] Runtime error: {kind} {message}.")]
+pub struct RuntimeError {
+    pub message: Option<String>,
+    pub kind: RuntimeErrorKind,
+    pub location: Loc,
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(message) = &self.message {
+            write!(
+                f,
+                "[{}] Runtime error: {}, {}",
+                self.location, self.kind, message
+            )
+        } else {
+            write!(f, "[{}] Runtime error: {}", self.location, self.kind)
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeErrorKind {
+    #[error("Invalid command {0}")]
     InvalidCommand(String),
-    #[error("Invalid strategy {0}. Expected one of {}", crate::strategies!())]
+    #[error("Invalid strategy {0}")]
     InvalidStrategy(String),
     #[error("Expected rule name")]
     ExpectedRuleName,
@@ -44,11 +69,53 @@ enum Error {
     NothingToUndo,
     #[error("Nothing to redo")]
     NothingToRedo,
-    #[error("Unexpected end of file: {0}")]
-    UnexpectedEOF(String),
+    #[error("Unexpected EOF")]
+    UnexpectedEOF,
+    #[error("File error")]
+    FileError,
+    #[error("Parse error")]
+    ParseError,
+    #[error("Apply error")]
+    ApplyError,
 }
-use crate::runtime::Error::*;
+use RuntimeErrorKind::*;
 
+impl RuntimeErrorKind {
+    pub fn message(self, message: String, location: Loc) -> RuntimeError {
+        RuntimeError {
+            location,
+            kind: self,
+            message: Some(message),
+        }
+    }
+
+    pub fn err(self, loc: Loc) -> RuntimeError {
+        RuntimeError {
+            message: None,
+            kind: self,
+            location: loc,
+        }
+    }
+}
+
+trait IntoRuntimeError<T> {
+    fn runtime(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError>;
+}
+
+impl<T, U: Display> IntoRuntimeError<T> for Result<T, U> {
+    fn runtime(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError> {
+        match self {
+            Ok(s) => Ok(s),
+            Err(e) => Err(RuntimeError {
+                message: Some(e.to_string()),
+                kind,
+                location,
+            }),
+        }
+    }
+}
+
+#[allow(unused)]
 pub enum InteractionResult {
     String(String),
     Int(isize),
@@ -62,7 +129,7 @@ pub trait Interaction {
     /// Returns Some(value) when the interaction is complete, or none to continue
     fn on_event(&mut self, input: Event) -> Option<InteractionResult>;
 
-    fn on_complete(&mut self, result: &InteractionResult) {}
+    fn on_complete(&mut self, _result: &InteractionResult) {}
 }
 
 pub struct SelectOne {
@@ -122,7 +189,7 @@ impl Interaction for SelectOne {
         }
     }
 
-    fn on_complete(&mut self, result: &InteractionResult) {}
+    fn on_complete(&mut self, _result: &InteractionResult) {}
 }
 
 pub struct StepResult {
@@ -194,7 +261,7 @@ impl Runtime {
         &mut self,
         mut lexer: &mut Lexer<impl Iterator<Item = char>>,
         rules_only: bool,
-    ) -> Result<StepResult> {
+    ) -> Result<StepResult, RuntimeError> {
         use TokenKind::*;
         if rules_only {
             loop {
@@ -217,15 +284,26 @@ impl Runtime {
         match lexer.next() {
             Some(lexer::Token {
                 kind: Command(CommandKind::Rule),
+                loc,
                 ..
             }) => {
-                let Some(Token {
-                    kind: TokenKind::Ident,
-                    text: name,
-                }) = lexer.next() else {
-                    return Err(ExpectedRuleName.into());
+                let name = match lexer.next() {
+                    Some(Token {
+                        kind: TokenKind::Ident,
+                        text: name,
+                        ..
+                    }) => name,
+                    Some(invalid) => {
+                        return Err(ExpectedRuleName.err(invalid.loc));
+                    }
+                    None => {
+                        return Err(UnexpectedEOF.err(loc));
+                    }
                 };
-                self.rules.insert(name.clone(), Rule::parse(&mut lexer)?);
+                self.rules.insert(
+                    name.clone(),
+                    Rule::parse(&mut lexer).runtime(ParseError, lexer.current_loc().prev_col())?,
+                );
                 if self.quiet {
                     Ok(StepResult::empty())
                 } else {
@@ -237,6 +315,7 @@ impl Runtime {
             }
             Some(lexer::Token {
                 kind: Command(CommandKind::Apply),
+                loc,
                 ..
             }) => {
                 if self.shape.is_some() {
@@ -244,12 +323,15 @@ impl Runtime {
                         Some(lexer::Token {
                             kind: TokenKind::Strategy(strategy),
                             text,
+                            ..
                         }) => (strategy, text),
                         Some(invalid) => {
-                            return Err(InvalidStrategy(invalid.text).into());
+                            return Err(InvalidStrategy(invalid.text).err(invalid.loc));
                         }
                         None => {
-                            return Err(UnexpectedEOF(format!("Expected strategy name")).into());
+                            return Err(
+                                UnexpectedEOF.message(format!("Expected strategy name"), loc)
+                            );
                         }
                     };
 
@@ -292,22 +374,22 @@ impl Runtime {
                                     }
                                     Ok(())
                                 })
-                                .collect::<Result<_>>()?;
+                                .collect::<Result<_>>()
+                                .runtime(ApplyError, lexer.current_loc())?;
 
                             Ok(StepResult::with_results(r))
                         }
                         Some(lexer::Token {
                             kind: TokenKind::Command(CommandKind::Rule),
+                            loc,
                             ..
                         }) => {
-                            let rule = Rule::parse(&mut lexer).map(|rule| {
-                                if reverse {
-                                    rule.reverse()
-                                } else {
-                                    rule
-                                }
-                            })?;
-                            let res = self.do_apply(&rule, strategy, n)?;
+                            let rule = Rule::parse(&mut lexer)
+                                .map(|rule| if reverse { rule.reverse() } else { rule })
+                                .runtime(ParseError, lexer.current_loc().prev_col())?;
+                            let res = self
+                                .do_apply(&rule, strategy, n)
+                                .runtime(ApplyError, lexer.current_loc())?;
                             if let Some(res) = res {
                                 Ok(StepResult::new(vec![res.0], res.1, res.2))
                             } else {
@@ -317,6 +399,8 @@ impl Runtime {
                         Some(lexer::Token {
                             kind: TokenKind::Ident,
                             text: name,
+                            loc,
+                            ..
                         }) => {
                             let rule = self
                                 .rules
@@ -328,9 +412,11 @@ impl Runtime {
                                         rule.clone()
                                     }
                                 })
-                                .ok_or(RuleDoesNotExist(name))?;
+                                .ok_or(RuleDoesNotExist(name).err(lexer.current_loc()))?;
 
-                            let res = self.do_apply(&rule, strategy, n)?;
+                            let res = self
+                                .do_apply(&rule, strategy, n)
+                                .runtime(ApplyError, lexer.current_loc())?;
                             if let Some(res) = res {
                                 Ok(StepResult::new(vec![res.0], res.1, res.2))
                             } else {
@@ -338,21 +424,24 @@ impl Runtime {
                             }
                         }
                         _ => {
-                            return Err(ExpectedRuleExprOrAnon.into());
+                            return Err(ExpectedRuleExprOrAnon.err(loc));
                         }
                     }
                 } else {
-                    return Err(NoShape.into());
+                    return Err(NoShape.err(loc));
                 }
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Shape),
+                loc,
                 ..
             }) => {
                 if self.shape.is_some() {
-                    return Err(AlreadyShaping.into());
+                    return Err(AlreadyShaping.err(loc));
                 }
-                self.shape = Some(expr::Expr::parse(lexer)?);
+                self.shape = Some(
+                    expr::Expr::parse(lexer).runtime(ParseError, lexer.current_loc().prev_col())?,
+                );
                 Ok(StepResult::with_results(vec![vec![format!(
                     "{}",
                     self.shape.clone().unwrap()
@@ -360,6 +449,7 @@ impl Runtime {
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Done),
+                loc,
                 ..
             }) => {
                 if let Some(shape) = &self.shape {
@@ -371,11 +461,12 @@ impl Runtime {
                         "\u{2714}".green().bold()
                     )]]))
                 } else {
-                    Err(NoShape.into())
+                    Err(NoShape.err(loc))
                 }
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Undo),
+                loc,
                 ..
             }) => {
                 if let Some(shape) = self.apply_history.pop() {
@@ -386,11 +477,12 @@ impl Runtime {
                         self.shape.clone().unwrap()
                     )]]))
                 } else {
-                    Err(NothingToUndo.into())
+                    Err(NothingToUndo.err(loc))
                 }
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Redo),
+                loc,
                 ..
             }) => {
                 if let Some(shape) = self.undo_history.pop() {
@@ -401,51 +493,74 @@ impl Runtime {
                         self.shape.clone().unwrap()
                     )]]))
                 } else {
-                    Err(NothingToRedo.into())
+                    Err(NothingToRedo.err(loc))
                 }
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Load),
                 text,
+                mut loc,
+                ..
             }) => {
                 let file_name = match lexer.next() {
                     Some(t) => match t {
                         lexer::Token {
                             kind: TokenKind::Ident,
                             text,
-                        } => text,
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::String,
                             text,
-                        } => text,
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::Path,
                             text,
-                        } => text,
-                        _ => return Err(InvalidCommand(format!("{}", text.red().bold())).into()),
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
+                        _ => return Err(InvalidCommand(format!("{}", text.red().bold())).err(loc)),
                     },
-                    None => return Err(UnexpectedEOF(format!("Expected file name")).into()),
+                    None => return Err(UnexpectedEOF.message(format!("Expected file name"), loc)),
                 };
                 let path = PathBuf::from(&file_name);
                 if !path.exists() {
-                    return Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "does not exist".red().bold()
-                    ))
-                    .into());
+                    return Err(FileError.message(
+                        format!(
+                            "{} {}",
+                            path.to_str().unwrap(),
+                            "does not exist".red().bold()
+                        ),
+                        loc,
+                    ));
                 }
                 if path.is_dir() {
-                    return Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "is a directory".red().bold()
-                    ))
-                    .into());
+                    return Err(FileError.message(
+                        format!("{} is a directory", path.to_str().unwrap().red().bold(),),
+                        loc,
+                    ));
                 }
-                let contents = fs::read_to_string(&path).map_err(|e| {
-                    anyhow::anyhow!("{}: {}", path.to_str().unwrap(), e.to_string().red().bold())
-                })?;
+                let contents = fs::read_to_string(&path)
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "{}: {}",
+                            path.to_str().unwrap(),
+                            e.to_string().red().bold()
+                        )
+                    })
+                    .runtime(FileError, lexer.current_loc())?;
                 let mut lexer = lexer::Lexer::new(contents.chars().peekable());
                 let mut res = vec![];
                 while !lexer.exhausted {
@@ -467,46 +582,66 @@ impl Runtime {
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Run),
                 text,
+                mut loc,
+                ..
             }) => {
                 let file_name = match lexer.next() {
                     Some(t) => match t {
                         lexer::Token {
                             kind: TokenKind::Ident,
                             text,
-                        } => text,
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::String,
                             text,
-                        } => text,
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::Path,
                             text,
-                        } => text,
-                        _ => return Err(InvalidCommand(format!("{}", text.red().bold())).into()),
+                            loc: new_loc,
+                            ..
+                        } => {
+                            loc = new_loc;
+                            text
+                        }
+                        _ => return Err(InvalidCommand(format!("{}", text.red().bold())).err(loc)),
                     },
-                    None => return Err(UnexpectedEOF(format!("Expected file name")).into()),
+                    None => return Err(UnexpectedEOF.message(format!("Expected file name"), loc)),
                 };
                 let path = PathBuf::from(&file_name);
                 if !path.exists() {
-                    return Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "does not exist".red().bold()
-                    ))
-                    .into());
+                    return Err(FileError.message(
+                        format!("{} does not exist", path.to_str().unwrap().red().bold(),),
+                        loc,
+                    ));
                 }
                 if path.is_dir() {
-                    return Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "is a directory".red().bold()
-                    ))
-                    .into());
+                    return Err(FileError.message(
+                        format!("{} is a directory", path.to_str().unwrap().red().bold(),),
+                        loc,
+                    ));
                 }
-                let contents = fs::read_to_string(&path).map_err(|e| {
-                    anyhow::anyhow!("{}: {}", path.to_str().unwrap(), e.to_string().red().bold())
-                })?;
-                let mut lexer = lexer::Lexer::new(contents.chars().peekable());
+                let contents = fs::read_to_string(&path)
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "{}: {}",
+                            path.to_str().unwrap(),
+                            e.to_string().red().bold()
+                        )
+                    })
+                    .runtime(FileError, lexer.current_loc())?;
+                let mut lexer = lexer::Lexer::new(contents.chars().peekable())
+                    .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
                 let mut res = vec![];
                 while !lexer.exhausted {
                     res.push(self.step(&mut lexer, false)?);
@@ -526,6 +661,7 @@ impl Runtime {
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Save),
+                mut loc,
                 ..
             }) => {
                 enum SaveType {
@@ -533,56 +669,70 @@ impl Runtime {
                     Commands,
                     Rules,
                 }
+
                 let save_type = match lexer.next() {
                     Some(tok) => match tok.kind {
-                        TokenKind::Rules => SaveType::Rules,
-                        TokenKind::Commands => SaveType::Commands,
-                        TokenKind::Strategy(StrategyKind::ApplyAll) => SaveType::All,
+                        TokenKind::Rules => {
+                            loc = tok.loc;
+                            SaveType::Rules
+                        }
+                        TokenKind::Commands => {
+                            loc = tok.loc;
+                            SaveType::Commands
+                        }
+                        TokenKind::Strategy(StrategyKind::ApplyAll) => {
+                            loc = tok.loc;
+                            SaveType::All
+                        }
                         _ => {
-                            return Err(InvalidCommand(format!(
-                                "{}, Expected save type (all, commands, or rules)",
-                                tok.text.red().bold()
-                            ))
-                            .into())
+                            return Err(InvalidCommand(format!("{}", tok.text.red().bold()))
+                                .message(
+                                    format!("Expected save type (all, commands, or rules)"),
+                                    tok.loc,
+                                ))
                         }
                     },
                     None => {
-                        return Err(UnexpectedEOF(format!(
-                            "Expected save type (all, commands, rules) and file name"
+                        return Err(UnexpectedEOF.message(
+                            format!("Expected save type (all, commands, rules) and file name"),
+                            loc,
                         ))
-                        .into())
                     }
                 };
+
                 let file_name = match lexer.next() {
                     Some(t) => match t {
                         lexer::Token {
                             kind: TokenKind::Ident,
                             text,
+                            ..
                         } => text,
                         lexer::Token {
                             kind: TokenKind::String,
                             text,
+                            ..
                         } => text,
                         lexer::Token {
                             kind: TokenKind::Path,
                             text,
+                            ..
                         } => text,
                         invalid => {
-                            return Err(InvalidCommand(format!(
-                                "{}, expected file name.",
-                                invalid.text.red().bold()
-                            ))
-                            .into())
+                            return Err(InvalidCommand(format!("{}", invalid.text.red().bold()))
+                                .message(format!("Expected file name"), invalid.loc))
                         }
                     },
-                    None => return Err(UnexpectedEOF(format!("Expected file name")).into()),
+                    None => return Err(UnexpectedEOF.message(format!("Expected file name"), loc)),
                 };
                 let path = PathBuf::from(&file_name);
                 let mut opt = OpenOptions::new();
                 if path.exists() && path.is_file() {
                     if let Some(hook) = self.interaction_hook.as_mut() {
                         let interaction = SelectOne::new(
-                            format!("File {} already exists, overwrite?", path.to_str().unwrap()),
+                            format!(
+                                "File {} already exists! What would you like to do?",
+                                path.to_str().unwrap().red()
+                            ),
                             vec![
                                 "Overwrite".to_string(),
                                 "Append".to_string(),
@@ -601,35 +751,39 @@ impl Runtime {
                                     return Err(anyhow::anyhow!(
                                         "File {} already exists",
                                         path.to_str().unwrap()
-                                    ));
+                                    ))
+                                    .runtime(FileError, lexer.current_loc());
                                 }
                             }
                             _ => unreachable!(),
                         }
                     }
                 } else if !path.exists() {
-                    fs::File::create(&path).map_err(|e| {
-                        anyhow::anyhow!(
-                            "Cannot create file: {}, {}",
-                            path.to_str().unwrap(),
-                            e.to_string().red().bold()
-                        )
-                    })?;
+                    fs::File::create(&path)
+                        .map_err(|e| {
+                            anyhow::anyhow!(
+                                "Cannot create file: {}, {}",
+                                path.to_str().unwrap(),
+                                e.to_string().red().bold()
+                            )
+                        })
+                        .runtime(FileError, lexer.current_loc())?;
                     opt.write(true).read(true).truncate(true);
                 } else {
-                    return Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "is a directory".red().bold()
-                    ))
-                    .into());
+                    return Err(FileError.message(
+                        format!("{} is a directory", path.to_str().unwrap().red().bold(),),
+                        loc,
+                    ));
                 };
 
                 let file = opt.open(&path).map_err(|e| {
-                    anyhow::anyhow!(
-                        "Cannot open file: {}, {}",
-                        path.to_str().unwrap(),
-                        e.to_string().red().bold()
+                    FileError.message(
+                        format!(
+                            "Cannot open file: {}, {}",
+                            path.to_str().unwrap(),
+                            e.to_string().red().bold()
+                        ),
+                        lexer.current_loc(),
                     )
                 })?;
                 let mut writer = BufWriter::new(file);
@@ -637,8 +791,10 @@ impl Runtime {
                 let res = match save_type {
                     SaveType::All => {
                         for (name, rule) in self.rules.iter() {
-                            writer.write_fmt(format_args!("rule {} {}\n", name, rule))?;
-                            writer.flush()?;
+                            writer
+                                .write_fmt(format_args!("rule {} {}\n", name, rule))
+                                .runtime(FileError, lexer.current_loc())?;
+                            writer.flush().runtime(FileError, lexer.current_loc())?;
                         }
                         format!(
                             "Saved {} rules and {} commands to {}",
@@ -650,8 +806,10 @@ impl Runtime {
                     SaveType::Commands => todo!(),
                     SaveType::Rules => {
                         for (name, rule) in self.rules.iter() {
-                            writer.write_fmt(format_args!("rule {} {}\n", name, rule))?;
-                            writer.flush()?;
+                            writer
+                                .write_fmt(format_args!("rule {} {}\n", name, rule))
+                                .runtime(FileError, lexer.current_loc())?;
+                            writer.flush().runtime(FileError, lexer.current_loc())?;
                         }
                         format!(
                             "Saved {} rules to {}",
@@ -660,7 +818,7 @@ impl Runtime {
                         )
                     }
                 };
-                writer.flush()?;
+                writer.flush().runtime(FileError, loc)?;
                 Ok(StepResult::with_results(vec![vec![res]]))
             }
             Some(lexer::Token {
@@ -709,6 +867,7 @@ impl Runtime {
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Cd),
+                mut loc,
                 ..
             }) => {
                 let path = match lexer.next() {
@@ -716,72 +875,93 @@ impl Runtime {
                         lexer::Token {
                             kind: TokenKind::Ident,
                             text,
-                        } => text,
+                            ..
+                        } => {
+                            loc = t.loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::String,
                             text,
-                        } => text,
+                            ..
+                        } => {
+                            loc = t.loc;
+                            text
+                        }
                         lexer::Token {
                             kind: TokenKind::Path,
                             text,
-                        } => text,
+                            ..
+                        } => {
+                            loc = t.loc;
+                            text
+                        }
                         invalid => {
-                            return Err(
-                                InvalidCommand(format!("{:?}, expected path.", invalid)).into()
-                            )
+                            return Err(InvalidCommand(format!(
+                                "{} ({:?})",
+                                invalid.text, invalid.kind
+                            ))
+                            .message(format!("Expected path."), invalid.loc))
                         }
                     },
-                    None => return Err(UnexpectedEOF(format!("Expected path")).into()),
+                    None => return Err(UnexpectedEOF.message(format!("Expected path"), loc)),
                 };
                 let path = PathBuf::from(&path);
                 if path.exists() && path.is_dir() {
-                    env::set_current_dir(&path).map_err(|e| {
-                        anyhow::anyhow!(
-                            "Cannot change directory: {}, {}",
-                            path.to_str().unwrap(),
-                            e.to_string().red().bold()
-                        )
-                    })?;
+                    env::set_current_dir(&path)
+                        .map_err(|e| {
+                            anyhow::anyhow!(
+                                "Cannot change directory: {}, {}",
+                                path.to_str().unwrap(),
+                                e.to_string().red().bold()
+                            )
+                        })
+                        .runtime(FileError, loc)?;
                     Ok(StepResult::with_results(vec![vec![format!(
                         "Changed directory to {}",
                         path.to_str().unwrap()
                     )]]))
                 } else {
-                    Err(InvalidCommand(format!(
-                        "{} {}",
-                        path.to_str().unwrap(),
-                        "is not a directory".red().bold()
+                    Err(FileError.message(
+                        format!("{} is not a directory", path.to_str().unwrap().red().bold(),),
+                        loc,
                     ))
-                    .into())
                 }
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Ls),
+                loc,
                 ..
             }) => {
-                let path = env::current_dir().map_err(|e| {
-                    anyhow::anyhow!(
-                        "Cannot get current directory: {}",
-                        e.to_string().red().bold()
-                    )
-                })?;
-                let mut entries = fs::read_dir(&path).map_err(|e| {
-                    anyhow::anyhow!(
-                        "Cannot read directory: {}, {}",
-                        path.to_str().unwrap(),
-                        e.to_string().red().bold()
-                    )
-                })?;
-                let mut files = vec![];
-                let mut dirs = vec![format!("{}{}", "..", "/".cyan())];
-                while let Some(entry) = entries.next() {
-                    let entry = entry.map_err(|e| {
+                let path = env::current_dir()
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Cannot get current directory: {}",
+                            e.to_string().red().bold()
+                        )
+                    })
+                    .runtime(FileError, lexer.current_loc())?;
+                let mut entries = fs::read_dir(&path)
+                    .map_err(|e| {
                         anyhow::anyhow!(
                             "Cannot read directory: {}, {}",
                             path.to_str().unwrap(),
                             e.to_string().red().bold()
                         )
-                    })?;
+                    })
+                    .runtime(FileError, lexer.current_loc())?;
+                let mut files = vec![];
+                let mut dirs = vec![format!("{}{}", "..", "/".cyan())];
+                while let Some(entry) = entries.next() {
+                    let entry = entry
+                        .map_err(|e| {
+                            anyhow::anyhow!(
+                                "Cannot read directory: {}, {}",
+                                path.to_str().unwrap(),
+                                e.to_string().red().bold()
+                            )
+                        })
+                        .runtime(FileError, lexer.current_loc())?;
                     let path = entry.path();
                     if path.is_file() {
                         files.push(path.file_name().unwrap().to_str().unwrap().to_string());
@@ -798,14 +978,17 @@ impl Runtime {
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Pwd),
+                loc,
                 ..
             }) => {
-                let path = env::current_dir().map_err(|e| {
-                    anyhow::anyhow!(
-                        "Cannot get current directory: {}",
-                        e.to_string().red().bold()
-                    )
-                })?;
+                let path = env::current_dir()
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Cannot get current directory: {}",
+                            e.to_string().red().bold()
+                        )
+                    })
+                    .runtime(FileError, lexer.current_loc())?;
                 Ok(StepResult::with_results(vec![vec![path
                     .to_str()
                     .unwrap()
@@ -826,8 +1009,10 @@ impl Runtime {
                 kind: TokenKind::Eof,
                 ..
             }) => Ok(StepResult::empty()),
-            Some(invalid) => Err(InvalidCommand(format!("{}", invalid.text.red().bold())).into()),
-            None => Err(UnexpectedEOF(format!("Expected command")).into()),
+            Some(invalid) => {
+                Err(InvalidCommand(format!("{}", invalid.text.red().bold())).err(invalid.loc))
+            }
+            None => Err(UnexpectedEOF.message(format!("Expected command"), lexer.current_loc())),
         }
     }
 

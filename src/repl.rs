@@ -9,14 +9,14 @@ use crossterm::{
     event::{read, Event, KeyCode, KeyEvent},
     execute,
     style::{Print, StyledContent, Stylize},
-    terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    lexer::{self, Lexer},
-    runtime::{Runtime, StepResult},
+    lexer::{self, Lexer, Loc},
+    runtime::{InteractionResult, Runtime, RuntimeError, StepResult},
 };
 
 pub struct Repl {
@@ -43,6 +43,12 @@ pub trait Highlight {
 pub enum HighlightKind {
     Command,
     Comment,
+    Path,
+    Str,
+    Keyword,
+    Strategy,
+    Op,
+    Invalid,
 }
 
 impl Highlight for String {
@@ -50,70 +56,43 @@ impl Highlight for String {
         use HighlightKind::*;
         let mut highlights = HashMap::new();
 
-        let mut start = 0;
-        let mut curr = 0;
-        let mut word = String::new();
+        let mut lexer = Lexer::new(self.chars().peekable());
 
-        let mut chars = self.chars().enumerate();
         loop {
-            match chars.next() {
-                Some((idx, '#')) => {
-                    if !word.is_empty() {
-                        for command in lexer::COMMANDS {
-                            if word.trim() == command {
-                                let word = word.drain(..).collect::<String>();
-                                highlights.insert(start, (Command, word));
-                            }
-                        }
-                        word.clear();
-                        start = idx + 1;
+            match lexer.next() {
+                Some(tok) => match tok.kind {
+                    lexer::TokenKind::Comment => {
+                        highlights.insert(tok.loc.offset, (Comment, tok.text));
                     }
-                    let mut comment = String::new();
-                    comment.push('#');
-                    loop {
-                        match chars.next() {
-                            Some((_, '\n')) => {
-                                curr += 1;
-                                comment.push('\n');
-                                break;
-                            }
-                            Some((_, c)) => {
-                                curr += 1;
-                                comment.push(c);
-                            }
-                            None => {
-                                break;
-                            }
-                        }
+                    lexer::TokenKind::Invalid => {
+                        highlights.insert(tok.loc.offset, (Invalid, tok.text));
                     }
-                    highlights.insert(start, (Comment, comment));
-                    start = curr + 1;
-                }
-                Some((idx, c)) => {
-                    if c.is_alphanumeric() {
-                        word.push(c);
-                    } else {
-                        for command in lexer::COMMANDS {
-                            if word.trim() == command {
-                                let word = word.drain(..).collect::<String>();
-                                highlights.insert(start, (Command, word));
-                            }
-                        }
-                        word.clear();
-                        start = idx + 1;
+                    lexer::TokenKind::String => {
+                        highlights.insert(tok.loc.offset, (Str, format!("\"{}\"", tok.text)));
                     }
-                }
-                None => {
-                    if !word.is_empty() {
-                        for command in lexer::COMMANDS {
-                            if word.trim() == command {
-                                let word = word.drain(..).collect::<String>();
-                                highlights.insert(start, (Command, word));
-                            }
-                        }
+                    lexer::TokenKind::UnclosedStr => {
+                        highlights.insert(tok.loc.offset, (Invalid, format!("\"{}", tok.text)));
                     }
-                    break;
-                }
+                    lexer::TokenKind::Path => {
+                        highlights.insert(tok.loc.offset, (Path, tok.text));
+                    }
+                    lexer::TokenKind::Rules
+                    | lexer::TokenKind::Commands
+                    | lexer::TokenKind::Reverse => {
+                        highlights.insert(tok.loc.offset, (Keyword, tok.text));
+                    }
+                    lexer::TokenKind::Op(_) => {
+                        highlights.insert(tok.loc.offset, (Op, tok.text));
+                    }
+                    lexer::TokenKind::Command(_) => {
+                        highlights.insert(tok.loc.offset, (Command, tok.text));
+                    }
+                    lexer::TokenKind::Strategy(_) => {
+                        highlights.insert(tok.loc.offset, (Strategy, tok.text));
+                    }
+                    _ => {}
+                },
+                None => break,
             }
         }
 
@@ -125,14 +104,20 @@ impl Highlight for String {
                 break;
             };
             if let Some((kind, hl)) = highlights.get(&idx) {
-                for _ in 0..hl.len() - 1 {
-                    chars.next();
+                if hl.len() > 0 {
+                    for _ in 0..hl.len() - 1 {
+                        chars.next();
+                    }
                 }
                 let hl = match kind {
-                    Command => hl.clone().blue().to_string(),
-                    Comment => hl.clone().yellow().to_string(),
-                    //Num => hl.clone().yellow().to_string(),
-                    //Str => hl.clone().red().to_string(),
+                    Command => format!("{}{}", hl.clone().blue(), "".reset()),
+                    Comment => format!("{}{}", hl.clone().dark_magenta(), "".reset()),
+                    Path => format!("{}{}", hl.clone().underlined(), "".reset()),
+                    Str => format!("{}{}", hl.clone().green(), "".reset()),
+                    Keyword => format!("{}{}", hl.clone().magenta(), "".reset()),
+                    Strategy => format!("{}{}", hl.clone().yellow(), "".reset()),
+                    Op => format!("{}{}", hl.clone().reset(), "".reset()),
+                    Invalid => format!("{}{}", hl.clone().dark_red(), "".reset()),
                 };
                 res.push_str(&hl)
             } else {
@@ -141,6 +126,22 @@ impl Highlight for String {
         }
         res.stylize()
     }
+}
+
+pub fn most_likely_command(input: &str) -> Option<String> {
+    todo!();
+    let mut lexer = Lexer::new(input.chars().peekable());
+    /* let mut res = None;
+    let cmd = match lexer.next() {
+        Some(tok) => match tok.kind {
+            lexer::TokenKind::Command(cmd) => cmd,
+            lexer::TokenKind::Invalid => None?,
+            _ => {}
+        },
+        None => None?,
+    };
+
+    last */
 }
 
 impl Repl {
@@ -168,53 +169,55 @@ impl Repl {
             context: Runtime::new(),
         };
         repl.context.quiet = false;
-        repl.context.interaction_hook = Some(Box::new(|mut trigger| {
-            let mut trigger_result = None;
-            let trigger = trigger.as_mut();
-            let mut stdout = std::io::stdout().lock();
-            execute!(stdout, crossterm::terminal::EnterAlternateScreen).unwrap();
-            crossterm::terminal::enable_raw_mode().unwrap();
-            let mut curr_line = 0;
+        repl.context.interaction_hook = Some(Box::new(Self::interaction_hook));
+        repl.run_loop();
+    }
 
-            while trigger_result.is_none() {
-                let display = trigger.display();
-                //let line_count = display.lines().count();
+    fn interaction_hook(mut trigger: Box<dyn crate::runtime::Interaction>) -> InteractionResult {
+        let mut trigger_result = None;
+        let trigger = trigger.as_mut();
+        let mut stdout = std::io::stdout().lock();
+        execute!(stdout, crossterm::terminal::EnterAlternateScreen).unwrap();
+        crossterm::terminal::enable_raw_mode().unwrap();
+        let mut curr_line = 0;
 
-                // clear lines of element display
-                execute!(
-                    stdout,
-                    cursor::Hide,
-                    MoveTo(0, 0),
-                    Clear(ClearType::FromCursorDown)
-                )
-                .unwrap();
+        while trigger_result.is_none() {
+            let display = trigger.display();
+            //let line_count = display.lines().count();
 
-                // print lines of element display via crossterm raw mode
-                for line in display.lines() {
-                    execute!(
-                        stdout,
-                        MoveTo(0, curr_line),
-                        Clear(ClearType::CurrentLine),
-                        Print(line),
-                    )
-                    .unwrap();
-                    curr_line += 1;
-                }
-                curr_line = 0;
-
-                trigger_result = trigger.on_event(read().unwrap());
-            }
-            trigger.on_complete(trigger_result.as_ref().unwrap());
-            crossterm::terminal::disable_raw_mode().unwrap();
+            // clear lines of element display
             execute!(
                 stdout,
-                crossterm::terminal::LeaveAlternateScreen,
-                cursor::Show
+                cursor::Hide,
+                MoveTo(0, 0),
+                Clear(ClearType::FromCursorDown)
             )
             .unwrap();
-            trigger_result.unwrap()
-        }));
-        repl.run_loop();
+
+            // print lines of element display via crossterm raw mode
+            for line in display.lines() {
+                execute!(
+                    stdout,
+                    MoveTo(0, curr_line),
+                    Clear(ClearType::CurrentLine),
+                    Print(line),
+                )
+                .unwrap();
+                curr_line += 1;
+            }
+            curr_line = 0;
+
+            trigger_result = trigger.on_event(read().unwrap());
+        }
+        trigger.on_complete(trigger_result.as_ref().unwrap());
+        crossterm::terminal::disable_raw_mode().unwrap();
+        execute!(
+            stdout,
+            crossterm::terminal::LeaveAlternateScreen,
+            cursor::Show
+        )
+        .unwrap();
+        trigger_result.unwrap()
     }
 
     fn prepare_prompt_line(&self, line: &String) -> String {
@@ -361,14 +364,17 @@ impl Repl {
                     self.insert = 0;
                     let input = self.input_buf.drain(..).collect();
 
+                    let mut clear = false;
+
                     // Handle regular input result
                     match self.handle_input(input) {
                         Ok(StepResult {
                             results: Some(output),
                             cmd_for_each: cmd_per,
-                            clear,
+                            clear: do_clear,
                             ..
                         }) => {
+                            clear = do_clear;
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
                                     + self.command_history.last().unwrap(),
@@ -402,12 +408,13 @@ impl Repl {
                                 }
                             }
                             self.result_lines_buf = res;
-                            if clear {
-                                self.result_lines_buf.clear();
-                                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All)).unwrap();
-                            }
                         }
-                        Ok(StepResult { results: None, .. }) => {
+                        Ok(StepResult {
+                            results: None,
+                            clear: do_clear,
+                            ..
+                        }) => {
+                            clear = do_clear;
                             self.result_lines_buf = vec![];
                         }
                         Err(err) => {
@@ -415,6 +422,8 @@ impl Repl {
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
                                     + self.command_history.last().unwrap(),
                             ];
+                            let err_col = err.location.col + prompt_len as usize;
+                            res.push(format!("{:>err_col$}", "^"));
                             res.extend(
                                 format!("{:width$}=> {}", " ", err, width = prompt_len as usize)
                                     .lines()
@@ -423,29 +432,54 @@ impl Repl {
                             self.result_lines_buf = res;
                         }
                     }
-                    execute!(
-                        stdout,
-                        cursor::Hide,
-                        MoveUp(self.prompt.len() as u16),
-                        Clear(ClearType::FromCursorDown),
-                    )
-                    .unwrap();
-                    disable_raw_mode().unwrap();
-                    println!("");
-                    for line in self.result_lines_buf.iter() {
-                        println!("{}", line.highlight());
-                        execute!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
-                    }
-                    println!("");
-                    for (idx, line) in self.prompt.iter().enumerate() {
-                        if idx == self.prompt.len() - 1 {
-                            print!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
-                            stdout.flush().unwrap();
-                        } else {
-                            println!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
+                    if clear {
+                        disable_raw_mode().unwrap();
+                        execute!(stdout, cursor::Hide, MoveTo(0, 0), Clear(ClearType::All))
+                            .unwrap();
+                        for (idx, line) in self.prompt.iter().enumerate() {
+                            if idx == self.prompt.len() - 1 {
+                                print!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
+                                stdout.flush().unwrap();
+                            } else {
+                                println!(
+                                    "{}",
+                                    self.prepare_prompt_line(&line.trim_end().to_owned())
+                                );
+                            }
                         }
+                        execute!(stdout, cursor::Show).unwrap();
+                        enable_raw_mode().unwrap();
+                    } else {
+                        execute!(
+                            stdout,
+                            cursor::Hide,
+                            MoveUp(self.prompt.len() as u16),
+                            MoveToColumn(0),
+                            Clear(ClearType::FromCursorDown),
+                        )
+                        .unwrap();
+                        disable_raw_mode().unwrap();
+                        if cursor::position().unwrap().1 > 0 {
+                            println!("");
+                        }
+                        for line in self.result_lines_buf.iter() {
+                            println!("{}", line);
+                            execute!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
+                        }
+                        println!("");
+                        for (idx, line) in self.prompt.iter().enumerate() {
+                            if idx == self.prompt.len() - 1 {
+                                print!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
+                                stdout.flush().unwrap();
+                            } else {
+                                println!(
+                                    "{}",
+                                    self.prepare_prompt_line(&line.trim_end().to_owned())
+                                );
+                            }
+                        }
+                        enable_raw_mode().unwrap();
                     }
-                    enable_raw_mode().unwrap();
                 }
                 _ => {}
             }
@@ -461,12 +495,11 @@ impl Repl {
         disable_raw_mode().unwrap();
     }
 
-    pub fn handle_input(&mut self, str: String) -> Result<StepResult> {
+    pub fn handle_input(&mut self, str: String) -> Result<StepResult, RuntimeError> {
         unsafe {
             INPUT = str;
         }
         let mut lexer = Lexer::new(unsafe { INPUT.chars() }.peekable());
-        let out = self.context.step(&mut lexer, false)?;
-        return Ok(out);
+        self.context.step(&mut lexer, false)
     }
 }

@@ -11,7 +11,7 @@ pub(crate) type Bindings = HashMap<String, Expr>;
 
 #[derive(Debug, Error)]
 #[error("Match error: {0}")]
-pub struct MatchError<'a>(&'a str);
+pub struct MatchError(String);
 
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
@@ -22,7 +22,9 @@ pub(crate) struct Rule {
 impl Rule {
     pub fn parse(mut lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
         let head = Expr::parse(&mut lexer)?;
-        lexer.next_if(|t| t.kind == TokenKind::Equals).unwrap();
+        lexer
+            .next_if(|t| t.kind == TokenKind::Equals)
+            .ok_or_else(|| MatchError(format!("Expected '=', got {}", lexer.next_token())))?;
         let body = Expr::parse(&mut lexer)?;
         Ok(Self { head, body })
     }
