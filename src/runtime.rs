@@ -12,11 +12,7 @@ use crate::{
     rule::{ApplyAll, ApplyCheck, ApplyDeep, ApplyFirst, ApplyNth, Rule, Strategy},
 };
 use anyhow::Result;
-use crossterm::{
-    event::Event,
-    style::Stylize,
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
+use crossterm::{event::Event, style::Stylize};
 use linked_hash_map::LinkedHashMap;
 
 pub struct Runtime {
@@ -1075,6 +1071,7 @@ impl Runtime {
         match tok.kind {
             Command(CommandKind::Help) => self.help(lexer),
             TokenKind::Command(CommandKind::Quit) => {
+                lexer.catchup();
                 self.quit = true;
                 return Ok(StepResult::empty());
             }
@@ -1103,8 +1100,14 @@ impl Runtime {
                     _ => self.cmd_def_shape(lexer),
                 }
             }
-            TokenKind::Comment => return Ok(StepResult::empty()),
-            TokenKind::Eof => return Ok(StepResult::empty()),
+            TokenKind::Comment => {
+                lexer.catchup();
+                Ok(StepResult::empty())
+            }
+            TokenKind::Eof => {
+                lexer.catchup();
+                return Ok(StepResult::empty());
+            }
             _invalid => {
                 return Err(InvalidCommand(format!("{}", tok.text.red().bold()))
                     .message("expected command".into(), tok.loc))

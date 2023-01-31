@@ -381,7 +381,22 @@ macro_rules! token_kinds {
                             self.prev = Some(Token::new($kind, text.clone(), loc.clone()));
                             Token::new($kind, text, loc)
                         },)?)+
-                        $($op_val => {
+                        "/" => {
+                            if let Some('/') = self.chars.peek() {
+                                while let Some(c) = self.chars.next_if(|x| *x != '\n') {
+                                    self.current_offset += 1;
+                                    self.current_col += 1;
+                                    text.push(c);
+                                }
+
+                                self.prev = Some(Token::new(Comment, text.clone(), loc.clone()));
+                                return Token::new(Comment, text, loc);
+                            }
+                            self.prev = Some(Token::new(Op(OpKind::Div), text.clone(), loc.clone()));
+                            Token::new(Op(OpKind::Div), text, loc)
+                        }
+                        $(#[allow(unreachable_patterns)]
+                        $op_val => {
                             self.prev = Some(Token::new(Op(OpKind::$op_kind), text.clone(), loc.clone()));
                             Token::new(Op(OpKind::$op_kind), text, loc)
                         },)+
@@ -396,39 +411,39 @@ macro_rules! token_kinds {
                         c => {
                             let c = c.chars().nth(0).unwrap();
                             if !c.is_alphanumeric() && !c.is_whitespace() {
-                                if c == '#' {
-                                    while let Some(c) = self.chars.next_if(|x| *x != '\n') {
-                                        self.current_offset += 1;
-                                        self.current_col += 1;
-                                        text.push(c);
-                                    }
-                                    self.prev = Some(Token::new(Comment, text.clone(), loc.clone()));
-                                    return Token::new(Comment, text, loc);
-                                }
-                                if c == '"' {
-                                    text.pop();
-                                    while let Some(c) = self.chars.next_if(|x| *x != '"') {
-                                        self.current_offset += 1;
-                                        self.current_col += 1;
-                                        text.push(c);
-                                    }
-                                    let Some('"') = self.chars.next() else {
-                                        self.prev = Some(Token::new(UnclosedStr, text.clone(), loc.clone()));
-                                        return Token::new(UnclosedStr, text, loc);
-                                    };
-                                    self.prev = Some(Token::new(String, text.to_string(), loc.clone()));
-                                    return Token::new(String, text.to_string(), loc);
-                                }
-                                if c == '@' {
-                                    while let Some(c) = self.chars.next_if(|x| !x.is_whitespace()) {
-                                        self.current_offset += 1;
-                                        self.current_col += 1;
-                                        text.push(c);
-                                    }
-                                    self.prev = Some(Token::new(Path, text[1..text.len()].to_string(), loc.clone()));
-                                    return Token::new(Path, text[1..text.len()].to_string(), loc);
-                                }
                                 match c {
+                                    '#' => {
+                                        while let Some(c) = self.chars.next_if(|x| *x != '\n') {
+                                            self.current_offset += 1;
+                                            self.current_col += 1;
+                                            text.push(c);
+                                        }
+                                        self.prev = Some(Token::new(Comment, text.clone(), loc.clone()));
+                                        return Token::new(Comment, text, loc);
+                                    }
+                                    '"' => {
+                                        text.pop();
+                                        while let Some(c) = self.chars.next_if(|x| *x != '"') {
+                                            self.current_offset += 1;
+                                            self.current_col += 1;
+                                            text.push(c);
+                                        }
+                                        let Some('"') = self.chars.next() else {
+                                            self.prev = Some(Token::new(UnclosedStr, text.clone(), loc.clone()));
+                                            return Token::new(UnclosedStr, text, loc);
+                                        };
+                                        self.prev = Some(Token::new(String, text.to_string(), loc.clone()));
+                                        return Token::new(String, text.to_string(), loc);
+                                    }
+                                    '@' => {
+                                        while let Some(c) = self.chars.next_if(|x| !x.is_whitespace()) {
+                                            self.current_offset += 1;
+                                            self.current_col += 1;
+                                            text.push(c);
+                                        }
+                                        self.prev = Some(Token::new(Path, text[1..text.len()].to_string(), loc.clone()));
+                                        return Token::new(Path, text[1..text.len()].to_string(), loc);
+                                    }
                                     '.' => {
                                         if self.chars.next_if(|x| *x == '.').is_some() {
                                             self.current_offset += 1;
@@ -469,13 +484,15 @@ macro_rules! token_kinds {
 
                             }
 
-                            while let Some(c) = self
-                                .chars
-                                .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace() && *x != '\n')
-                            {
-                                text.push(c);
-                                self.current_col += 1;
-                                self.current_offset += 1;
+                            if c.is_alphanumeric() {
+                                while let Some(c) = self
+                                    .chars
+                                    .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace() && *x != '\n')
+                                {
+                                    text.push(c);
+                                    self.current_col += 1;
+                                    self.current_offset += 1;
+                                }
                             }
 
 
