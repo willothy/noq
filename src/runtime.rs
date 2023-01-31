@@ -21,10 +21,18 @@ pub struct Runtime {
     rules: LinkedHashMap<String, Rule>,
     apply_history: Vec<Expr>,
     undo_history: Vec<Expr>,
-    shape: Option<Expr>,
+    shape_stack: Vec<Expr>,
+    shaping_rule: Option<(String, Expr)>,
     pub quit: bool,
-    pub quiet: bool,
+    pub verbosity: Verbosity,
     pub interaction_hook: Option<Box<dyn Fn(Box<dyn Interaction>) -> InteractionResult>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Verbosity {
+    Silent,
+    Normal,
+    Verbose,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -242,15 +250,16 @@ impl Runtime {
             rules: LinkedHashMap::new(),
             apply_history: Vec::new(),
             undo_history: Vec::new(),
-            shape: None,
-            quiet: false,
+            shape_stack: vec![],
+            shaping_rule: None,
+            verbosity: Verbosity::Silent,
             quit: false,
             interaction_hook: None,
         }
     }
 
     pub fn show_shape(&self) -> Result<String> {
-        if let Some(shape) = &self.shape {
+        if let Some(shape) = &self.shape_stack.last() {
             Ok(format!("{}", shape))
         } else {
             Err(NoShape.into())
@@ -267,6 +276,16 @@ impl Runtime {
             loop {
                 match lexer.peek().kind {
                     Command(CommandKind::Rule) => break,
+                    Command(CommandKind::Apply) => {
+                        if self.shaping_rule.is_some() {
+                            break;
+                        }
+                    }
+                    Command(CommandKind::Done) => {
+                        if self.shaping_rule.is_some() {
+                            break;
+                        }
+                    }
                     Eof => {
                         lexer.next();
                         return Ok(StepResult::empty());
@@ -300,13 +319,31 @@ impl Runtime {
                         return Err(UnexpectedEOF.err(loc));
                     }
                 };
-                self.rules.insert(
-                    name.clone(),
-                    Rule::parse(&mut lexer).runtime(ParseError, lexer.current_loc().prev_col())?,
-                );
-                if self.quiet {
-                    Ok(StepResult::empty())
+
+                if lexer
+                    .next_if(|tok| tok.kind == TokenKind::Command(CommandKind::Shape))
+                    .is_some()
+                {
+                    self.shaping_rule = Some((
+                        name.clone(),
+                        Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?,
+                    ));
+                    self.shape_stack
+                        .push(self.shaping_rule.as_ref().unwrap().1.clone());
+                    if self.verbosity == Verbosity::Silent {
+                        Ok(StepResult::empty())
+                    } else {
+                        Ok(StepResult::with_results(vec![vec![format!(
+                            "{}",
+                            self.shape_stack.last().unwrap()
+                        )]]))
+                    }
                 } else {
+                    self.rules.insert(
+                        name.clone(),
+                        Rule::parse(&mut lexer)
+                            .runtime(ParseError, lexer.current_loc().prev_col())?,
+                    );
                     Ok(StepResult::with_results(vec![vec![format!(
                         "Rule {} defined",
                         name.yellow()
@@ -318,7 +355,7 @@ impl Runtime {
                 loc,
                 ..
             }) => {
-                if self.shape.is_some() {
+                if self.shape_stack.last().is_some() {
                     let (strategy, n) = match lexer.next() {
                         Some(lexer::Token {
                             kind: TokenKind::Strategy(strategy),
@@ -377,7 +414,13 @@ impl Runtime {
                                 .collect::<Result<_>>()
                                 .runtime(ApplyError, lexer.current_loc())?;
 
-                            Ok(StepResult::with_results(r))
+                            Ok(StepResult::with_results(
+                                if self.verbosity == Verbosity::Silent {
+                                    vec![]
+                                } else {
+                                    r
+                                },
+                            ))
                         }
                         Some(lexer::Token {
                             kind: TokenKind::Command(CommandKind::Rule),
@@ -391,7 +434,15 @@ impl Runtime {
                                 .do_apply(&rule, strategy, n)
                                 .runtime(ApplyError, lexer.current_loc())?;
                             if let Some(res) = res {
-                                Ok(StepResult::new(vec![res.0], res.1, res.2))
+                                Ok(StepResult::new(
+                                    if self.verbosity == Verbosity::Silent {
+                                        vec![]
+                                    } else {
+                                        vec![res.0]
+                                    },
+                                    res.1,
+                                    res.2,
+                                ))
                             } else {
                                 Ok(StepResult::empty())
                             }
@@ -418,7 +469,15 @@ impl Runtime {
                                 .do_apply(&rule, strategy, n)
                                 .runtime(ApplyError, lexer.current_loc())?;
                             if let Some(res) = res {
-                                Ok(StepResult::new(vec![res.0], res.1, res.2))
+                                Ok(StepResult::new(
+                                    if self.verbosity == Verbosity::Silent {
+                                        vec![]
+                                    } else {
+                                        vec![res.0]
+                                    },
+                                    res.1,
+                                    res.2,
+                                ))
                             } else {
                                 Ok(StepResult::empty())
                             }
@@ -436,30 +495,53 @@ impl Runtime {
                 loc,
                 ..
             }) => {
-                if self.shape.is_some() {
-                    return Err(AlreadyShaping.err(loc));
+                if let Eof = lexer.peek().kind {
+                    if self.verbosity == Verbosity::Silent {
+                        Ok(StepResult::empty())
+                    } else {
+                        if let Some(s) = self.shape_stack.last() {
+                            Ok(StepResult::with_results(vec![vec![format!("{}", s)]]))
+                        } else {
+                            return Err(NoShape.err(loc));
+                        }
+                    }
+                } else {
+                    if self.shape_stack.last().is_some() {
+                        return Err(AlreadyShaping.err(loc));
+                    }
+                    self.shape_stack.push(
+                        expr::Expr::parse(lexer)
+                            .runtime(ParseError, lexer.current_loc().prev_col())?,
+                    );
+                    if self.verbosity == Verbosity::Silent {
+                        Ok(StepResult::empty())
+                    } else {
+                        Ok(StepResult::with_results(vec![vec![format!(
+                            "{}",
+                            self.shape_stack.last().clone().unwrap()
+                        )]]))
+                    }
                 }
-                self.shape = Some(
-                    expr::Expr::parse(lexer).runtime(ParseError, lexer.current_loc().prev_col())?,
-                );
-                Ok(StepResult::with_results(vec![vec![format!(
-                    "{}",
-                    self.shape.clone().unwrap()
-                )]]))
             }
             Some(lexer::Token {
                 kind: TokenKind::Command(CommandKind::Done),
                 loc,
                 ..
             }) => {
-                if let Some(shape) = &self.shape {
-                    let shape = shape.clone();
-                    self.shape = None;
-                    Ok(StepResult::with_results(vec![vec![format!(
-                        "{} {}",
-                        shape.to_string().green(),
-                        "\u{2714}".green().bold()
-                    )]]))
+                if let Some(shape) = self.shape_stack.pop() {
+                    if let Some((name, head)) = self.shaping_rule.take() {
+                        self.rules.insert(name.clone(), Rule { head, body: shape });
+                        Ok(StepResult::with_results(vec![vec![format!(
+                            "Rule {} defined",
+                            name.yellow(),
+                        )]]))
+                    } else {
+                        Ok(StepResult::with_results(vec![vec![format!(
+                            "{} {}",
+                            shape.to_string().green(),
+                            "\u{2714}".green().bold()
+                        )]]))
+                    }
                 } else {
                     Err(NoShape.err(loc))
                 }
@@ -470,11 +552,13 @@ impl Runtime {
                 ..
             }) => {
                 if let Some(shape) = self.apply_history.pop() {
-                    self.undo_history
-                        .push(std::mem::replace(&mut self.shape, Some(shape)).unwrap());
+                    self.undo_history.push(std::mem::replace(
+                        &mut self.shape_stack.last_mut().unwrap(),
+                        shape,
+                    ));
                     Ok(StepResult::with_results(vec![vec![format!(
                         "{}",
-                        self.shape.clone().unwrap()
+                        self.shape_stack.last().unwrap()
                     )]]))
                 } else {
                     Err(NothingToUndo.err(loc))
@@ -486,11 +570,13 @@ impl Runtime {
                 ..
             }) => {
                 if let Some(shape) = self.undo_history.pop() {
-                    self.apply_history
-                        .push(std::mem::replace(&mut self.shape, Some(shape)).unwrap());
+                    self.apply_history.push(std::mem::replace(
+                        &mut self.shape_stack.last_mut().unwrap(),
+                        shape,
+                    ));
                     Ok(StepResult::with_results(vec![vec![format!(
                         "{}",
-                        self.shape.clone().unwrap()
+                        self.shape_stack.last().unwrap()
                     )]]))
                 } else {
                     Err(NothingToRedo.err(loc))
@@ -563,9 +649,12 @@ impl Runtime {
                     .runtime(FileError, lexer.current_loc())?;
                 let mut lexer = lexer::Lexer::new(contents.chars().peekable());
                 let mut res = vec![];
+                let old_verbosity = self.verbosity;
+                self.verbosity = Verbosity::Silent;
                 while !lexer.exhausted {
                     res.push(self.step(&mut lexer, true)?);
                 }
+                self.verbosity = old_verbosity;
 
                 let res = res
                     .iter_mut()
@@ -1029,21 +1118,21 @@ impl Runtime {
         use StrategyResult::*;
         let apply = match strategy {
             StrategyKind::ApplyAll => {
-                Apply(rule.apply(&self.shape.as_mut().unwrap(), &mut ApplyAll))
+                Apply(rule.apply(&self.shape_stack.last_mut().unwrap(), &mut ApplyAll))
             }
             StrategyKind::ApplyFirst => {
-                Apply(rule.apply(&self.shape.as_mut().unwrap(), &mut ApplyFirst))
+                Apply(rule.apply(&self.shape_stack.last_mut().unwrap(), &mut ApplyFirst))
             }
             StrategyKind::ApplyDeep => {
-                Apply(rule.apply(&self.shape.as_mut().unwrap(), &mut ApplyDeep))
+                Apply(rule.apply(&self.shape_stack.last_mut().unwrap(), &mut ApplyDeep))
             }
             StrategyKind::ApplyNth => Apply(rule.apply(
-                &self.shape.as_mut().unwrap(),
+                &self.shape_stack.last_mut().unwrap(),
                 &mut ApplyNth::new(n.parse()?),
             )),
             StrategyKind::Check => {
                 let mut check = ApplyCheck::new();
-                rule.apply(&self.shape.as_mut().unwrap(), &mut check);
+                rule.apply(&self.shape_stack.last().unwrap(), &mut check);
                 Check(check)
             }
             #[allow(unreachable_patterns)]
@@ -1052,9 +1141,11 @@ impl Runtime {
         let mut res = vec![];
         let mut indent_each = false;
         if let Apply(apply) = apply {
-            self.apply_history
-                .push(std::mem::replace(self.shape.as_mut().unwrap(), apply));
-            res.push(format!("{}", self.shape.clone().unwrap()));
+            self.apply_history.push(std::mem::replace(
+                self.shape_stack.last_mut().unwrap(),
+                apply,
+            ));
+            res.push(format!("{}", self.shape_stack.last().unwrap()));
         } else if let Check(mut check) = apply {
             res.extend(
                 check

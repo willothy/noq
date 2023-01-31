@@ -15,8 +15,8 @@ use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    lexer::{self, Lexer, Loc},
-    runtime::{InteractionResult, Runtime, RuntimeError, StepResult},
+    lexer::{self, Lexer, STRATEGIES},
+    runtime::{InteractionResult, Runtime, RuntimeError, StepResult, Verbosity},
 };
 
 pub struct Repl {
@@ -129,19 +129,61 @@ impl Highlight for String {
 }
 
 pub fn most_likely_command(input: &str) -> Option<String> {
-    todo!();
     let mut lexer = Lexer::new(input.chars().peekable());
-    /* let mut res = None;
     let cmd = match lexer.next() {
         Some(tok) => match tok.kind {
             lexer::TokenKind::Command(cmd) => cmd,
             lexer::TokenKind::Invalid => None?,
-            _ => {}
+            _ => None?,
         },
         None => None?,
     };
-
-    last */
+    use lexer::CommandKind::*;
+    match cmd {
+        Apply => {
+            let _strategy = match lexer.next() {
+                Some(tok) => match tok.kind {
+                    lexer::TokenKind::Strategy(strategy) => strategy,
+                    lexer::TokenKind::Invalid => None?,
+                    _ => {
+                        for strat in STRATEGIES {
+                            if strat.starts_with(&tok.text) {
+                                return Some(strat.to_string());
+                            }
+                        }
+                        None?
+                    }
+                },
+                None => {
+                    return Some(STRATEGIES[0].to_string());
+                }
+            };
+            None?
+        }
+        Done | Shape | Rule | Undo | Redo | Help | Quit | Load | Run | Clear => None?,
+        Save => {
+            let _save_level = match lexer.next() {
+                Some(tok) => {
+                    if tok.kind != lexer::TokenKind::Rules && "rules".starts_with(&tok.text) {
+                        return Some("rules".to_string());
+                    }
+                    if tok.kind != lexer::TokenKind::Rules && "commands".starts_with(&tok.text) {
+                        return Some("commands".to_string());
+                    }
+                    if tok.kind != lexer::TokenKind::Rules && "all".starts_with(&tok.text) {
+                        return Some("all".to_string());
+                    }
+                }
+                None => {
+                    return Some(STRATEGIES[0].to_string());
+                }
+            };
+            None?
+        }
+        Cd => None?,
+        Ls => None?,
+        Pwd => None?,
+    }
 }
 
 impl Repl {
@@ -168,7 +210,7 @@ impl Repl {
             quit: false,
             context: Runtime::new(),
         };
-        repl.context.quiet = false;
+        repl.context.verbosity = Verbosity::Normal;
         repl.context.interaction_hook = Some(Box::new(Self::interaction_hook));
         repl.run_loop();
     }
