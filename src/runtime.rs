@@ -9,6 +9,7 @@ use std::{
 use crate::{
     expr::Expr,
     lexer::{self, CommandKind, Lexer, Loc, StrategyKind, TokenKind},
+    repl::Highlight,
     rule::{ApplyAll, ApplyCheck, ApplyDeep, ApplyFirst, ApplyNth, Rule, Strategy},
 };
 use anyhow::Result;
@@ -26,15 +27,15 @@ pub struct Runtime {
     pub interaction_hook: Option<Box<dyn Fn(Box<dyn Interaction>) -> InteractionResult>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Verbosity {
     Silent,
     Normal,
+    #[allow(dead_code)]
     Verbose,
 }
 
 #[derive(Debug, thiserror::Error)]
-//#[error("[{location}] Runtime error: {kind} {message}.")]
 pub struct RuntimeError {
     pub message: Option<String>,
     pub kind: RuntimeErrorKind,
@@ -107,11 +108,11 @@ impl RuntimeErrorKind {
 }
 
 trait IntoRuntimeError<T> {
-    fn runtime(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError>;
+    fn runtime_error(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError>;
 }
 
 impl<T, U: Display> IntoRuntimeError<T> for Result<T, U> {
-    fn runtime(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError> {
+    fn runtime_error(self, kind: RuntimeErrorKind, location: Loc) -> Result<T, RuntimeError> {
         match self {
             Ok(s) => Ok(s),
             Err(e) => Err(RuntimeError {
@@ -323,7 +324,7 @@ impl Runtime {
             .map_err(|e| {
                 anyhow::anyhow!("{}: {}", path.to_str().unwrap(), e.to_string().red().bold())
             })
-            .runtime(FileError, lexer.current_loc())?;
+            .runtime_error(FileError, lexer.current_loc())?;
         let mut lexer = lexer::Lexer::new(contents.chars().peekable());
         let mut res = vec![];
         let old_verbosity = self.verbosity;
@@ -351,40 +352,50 @@ impl Runtime {
         lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
         lexer.catchup();
-        let color = |s: &'static str| s.dark_cyan().bold();
-        let underline = |s: &'static str| s.underlined();
-        return Ok(StepResult::with_results(vec![vec![format!(
-            "Commands:
-         {rule} {rule_name} <rule>; - define a rule
-         {apply} {rule_name}        - apply a rule to the shape
-         {apply} {rule} <rule>;       - apply an anonymous rule to the shape
-         {shape} <shape>            - define the shape
-         {shape}                    - print current shape
-         {done}                     - finish the shape (clear current shape)
-         {undo}                     - undo the last apply
-         {redo}                     - redo the last undo
-         {help}                     - print this help message
+        let pat = |s: &'static str| s.dark_magenta().bold();
+        let cmd = |s: &'static str| s.dark_blue();
+        return Ok(StepResult::with_results(vec![vec![format!("\
+         Commands:
+            {shape}  -------------------- define a shape
+            {rule_name} :: {rule}  ------ define a rule
+            {rule_name} :: {shape} {{  --- define a rule via shaping (open paren is optional on command line)
+            {rule_name} | {strategy}  --- apply a rule to the shape
+            :: {rule}   | {strategy}  --- apply an anonymous rule to the shape
+            }}  -------------------------- finish the shape
+            {done}  ----------------------- finish the shape
+            {undo}  ----------------------- undo the last apply
+            {redo}  ----------------------- redo the last undo
+            {run} {path}  ----------------- run a file
+            {use} {path}  ----------------- use rules from a file
+            {ls}  ------------------------- list files in current directory
+            {cd} {path}  ------------------ change directory
+            {pwd}  ------------------------ print current directory
+            {clear}  ---------------------- clear the screen
+            {quit}  ----------------------- quit the repl
+            {help}  ----------------------- print this help message
 
-     Example:
-         {rule} {swap} swap(X(A, B)) = X(B, A);
-         {rule} {rot} rot(triple(A, B, C)) = triple(C, A, B);
-
-         {shape} swap(pair(f(a), g(b)))
-             {apply} {swap}
-             {apply} {rule} pair(A, B) = rot(triple(A, B, c));
-             {apply} {rot}
-         {done}
+         Strategies:
+            Apply Nth (number, 0-n)      [Example: square | 2 ]
+            Apply All (all)              [Example: square | all ]
+            Apply Deep (deep)            [Example: square | deep ]
+            Check (check)                [Example: square | check ]
                     ",
-            rule = color("rule"),
-            rule_name = underline("<rule_name>"),
-            rot = underline("rot"),
-            swap = underline("swap"),
-            shape = color("shape"),
-            done = color("done"),
-            undo = color("undo"),
-            redo = color("redo"),
-            help = color("help"),
-            apply = color("apply")
+            strategy = "<strategy>".yellow(),
+            shape = pat("<shape>"),
+            rule_name = pat("<rule_name>"),
+            rule = pat("<rule>"),
+            path = pat("<path>"),
+            done = cmd("done"),
+            undo = cmd("undo"),
+            redo = cmd("redo"),
+            run = cmd("run"),
+            use = cmd("use"),
+            ls = cmd("ls"),
+            cd = cmd("cd"),
+            pwd = cmd("pwd"),
+            clear = cmd("clear"),
+            quit = cmd("quit"),
+            help = cmd("help"),
         )]]));
     }
 
@@ -511,7 +522,7 @@ impl Runtime {
                                 "File {} already exists",
                                 path.to_str().unwrap()
                             ))
-                            .runtime(FileError, lexer.current_loc());
+                            .runtime_error(FileError, lexer.current_loc());
                         }
                     }
                     _ => unreachable!(),
@@ -526,7 +537,7 @@ impl Runtime {
                         e.to_string().red().bold()
                     )
                 })
-                .runtime(FileError, lexer.current_loc())?;
+                .runtime_error(FileError, lexer.current_loc())?;
             opt.write(true).read(true).truncate(true);
         } else {
             return Err(FileError.message(
@@ -551,9 +562,11 @@ impl Runtime {
             SaveType::All => {
                 for (name, rule) in self.rules.iter() {
                     writer
-                        .write_fmt(format_args!("rule {} {}\n", name, rule))
-                        .runtime(FileError, lexer.current_loc())?;
-                    writer.flush().runtime(FileError, lexer.current_loc())?;
+                        .write_fmt(format_args!("{} :: {}\n", name, rule))
+                        .runtime_error(FileError, lexer.current_loc())?;
+                    writer
+                        .flush()
+                        .runtime_error(FileError, lexer.current_loc())?;
                 }
                 format!(
                     "Saved {} rules and {} commands to {}",
@@ -566,9 +579,11 @@ impl Runtime {
             SaveType::Rules => {
                 for (name, rule) in self.rules.iter() {
                     writer
-                        .write_fmt(format_args!("rule {} {}\n", name, rule))
-                        .runtime(FileError, lexer.current_loc())?;
-                    writer.flush().runtime(FileError, lexer.current_loc())?;
+                        .write_fmt(format_args!("{} :: {}\n", name, rule))
+                        .runtime_error(FileError, lexer.current_loc())?;
+                    writer
+                        .flush()
+                        .runtime_error(FileError, lexer.current_loc())?;
                 }
                 format!(
                     "Saved {} rules to {}",
@@ -577,7 +592,7 @@ impl Runtime {
                 )
             }
         };
-        writer.flush().runtime(FileError, loc)?;
+        writer.flush().runtime_error(FileError, loc)?;
         Ok(StepResult::with_results(vec![vec![res]]))
     }
 
@@ -634,7 +649,7 @@ impl Runtime {
             .map_err(|e| {
                 anyhow::anyhow!("{}: {}", path.to_str().unwrap(), e.to_string().red().bold())
             })
-            .runtime(FileError, lexer.current_loc())?;
+            .runtime_error(FileError, lexer.current_loc())?;
         let mut lexer = lexer::Lexer::new(contents.chars().peekable())
             .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
         let mut res = vec![];
@@ -684,9 +699,9 @@ impl Runtime {
         mut lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
         lexer.catchup();
-        let head = Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?;
+        let head = Expr::parse(&mut lexer).runtime_error(ParseError, lexer.current_loc())?;
         let rule = if lexer.next_if(|x| x.kind == TokenKind::Equals).is_some() {
-            let body = Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?;
+            let body = Expr::parse(&mut lexer).runtime_error(ParseError, lexer.current_loc())?;
 
             Rule { head, body }
         } else {
@@ -717,7 +732,7 @@ impl Runtime {
         };
         let res = self
             .do_apply(&if reversed { rule.reverse() } else { rule }, strategy, n)
-            .runtime(ApplyError, lexer.current_loc())?;
+            .runtime_error(ApplyError, lexer.current_loc())?;
         if let Some(res) = res {
             Ok(StepResult::new(
                 if self.verbosity == Verbosity::Silent {
@@ -737,7 +752,7 @@ impl Runtime {
         &mut self,
         lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
-        //lexer.catchup();
+        lexer.catchup();
         if !lexer.next_if(|x| x.kind == TokenKind::Bar).is_some() {
             let bad = lexer.next_token();
             return Err(UnexpectedToken.message(format!("Expected '|', got {}", bad), bad.loc));
@@ -759,6 +774,7 @@ impl Runtime {
             }
         };
         let mut r = vec![];
+        let mut no_matches = vec![];
         self.rules
             .clone()
             .iter()
@@ -773,22 +789,27 @@ impl Runtime {
                 )
             })
             .map(|(name, rule)| {
-                let sub_result = self.do_apply(&rule, strategy.clone(), n.clone())?;
-                if let Some(sub_result) = sub_result {
+                if let Some(sub_result) = self.do_apply(&rule, strategy.clone(), n.clone())? {
                     let mut new = vec![];
-                    if !sub_result.0.is_empty() {
+                    if sub_result.0.is_empty() {
+                        no_matches.push(name.to_owned());
+                    } else {
                         new.push(format!("{}:", name.to_owned().green()));
                         new.extend(sub_result.0.iter().map(|s| format!("-> {}", s)));
-                    } else {
-                        new.push(format!("{}:", name));
-                        new.push(format!("-> {}", "no matches".red()))
+                        r.push(new);
                     }
-                    r.push(new);
                 }
                 Ok(())
             })
             .collect::<Result<_>>()
-            .runtime(ApplyError, lexer.current_loc())?;
+            .runtime_error(ApplyError, lexer.current_loc())?;
+
+        if !no_matches.is_empty() {
+            r.push(vec![
+                format!("{}:", no_matches.join(", ")),
+                format!("-> {}", "no matches".red()),
+            ]);
+        }
 
         Ok(StepResult::with_results(
             if self.verbosity == Verbosity::Silent {
@@ -806,7 +827,7 @@ impl Runtime {
     ) -> Result<StepResult, RuntimeError> {
         lexer.catchup();
         // Rule definition
-        let head = Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?;
+        let head = Expr::parse(&mut lexer).runtime_error(ParseError, lexer.current_loc())?;
 
         match lexer.next_token().kind {
             TokenKind::OpenBrace | TokenKind::Eof => {
@@ -828,7 +849,8 @@ impl Runtime {
                     name.clone(),
                     Rule {
                         head,
-                        body: Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?,
+                        body: Expr::parse(&mut lexer)
+                            .runtime_error(ParseError, lexer.current_loc())?,
                     },
                 );
                 Ok(StepResult::with_results(vec![vec![format!(
@@ -885,7 +907,7 @@ impl Runtime {
 
             let res = self
                 .do_apply(&rule, strategy, n)
-                .runtime(ApplyError, lexer.current_loc())?;
+                .runtime_error(ApplyError, lexer.current_loc())?;
             if let Some(res) = res {
                 Ok(StepResult::new(
                     if self.verbosity == Verbosity::Silent {
@@ -909,21 +931,24 @@ impl Runtime {
         mut lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
         // Shape definition
-        //lexer.catchup();
-        let shape = Expr::parse(&mut lexer).runtime(ParseError, lexer.current_loc())?;
+        let shape = Expr::parse(&mut lexer).runtime_error(ParseError, lexer.current_loc())?;
         if lexer
             .next_if(|tok| tok.kind == TokenKind::OpenBrace)
             .is_some()
             || lexer.next_if(|tok| tok.kind == TokenKind::Eof).is_some()
         {
-            self.shape_stack.push(shape);
-            if self.verbosity == Verbosity::Silent {
-                Ok(StepResult::empty())
+            if self.shape_stack.is_empty() {
+                self.shape_stack.push(shape);
+                if self.verbosity == Verbosity::Silent {
+                    Ok(StepResult::empty())
+                } else {
+                    Ok(StepResult::with_results(vec![vec![format!(
+                        "{}",
+                        self.shape_stack.last().unwrap()
+                    )]]))
+                }
             } else {
-                Ok(StepResult::with_results(vec![vec![format!(
-                    "{}",
-                    self.shape_stack.last().unwrap()
-                )]]))
+                return Err(AlreadyShaping.err(lexer.current_loc()));
             }
         } else {
             let invalid = lexer.next().unwrap();
@@ -946,7 +971,7 @@ impl Runtime {
                     e.to_string().red().bold()
                 )
             })
-            .runtime(FileError, lexer.current_loc())?;
+            .runtime_error(FileError, lexer.current_loc())?;
         Ok(StepResult::with_results(vec![vec![path
             .to_str()
             .unwrap()
@@ -999,7 +1024,7 @@ impl Runtime {
                         e.to_string().red().bold()
                     )
                 })
-                .runtime(FileError, loc)?;
+                .runtime_error(FileError, loc)?;
             Ok(StepResult::with_results(vec![vec![format!(
                 "Changed directory to {}",
                 path.to_str().unwrap()
@@ -1024,7 +1049,7 @@ impl Runtime {
                     e.to_string().red().bold()
                 )
             })
-            .runtime(FileError, lexer.current_loc())?;
+            .runtime_error(FileError, lexer.current_loc())?;
         let mut entries = fs::read_dir(&path)
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -1033,7 +1058,7 @@ impl Runtime {
                     e.to_string().red().bold()
                 )
             })
-            .runtime(FileError, lexer.current_loc())?;
+            .runtime_error(FileError, lexer.current_loc())?;
         let mut files = vec![];
         let mut dirs = vec![format!("{}{}", "..", "/".cyan())];
         while let Some(entry) = entries.next() {
@@ -1045,7 +1070,7 @@ impl Runtime {
                         e.to_string().red().bold()
                     )
                 })
-                .runtime(FileError, lexer.current_loc())?;
+                .runtime_error(FileError, lexer.current_loc())?;
             let path = entry.path();
             if path.is_file() {
                 files.push(path.file_name().unwrap().to_str().unwrap().to_string());
@@ -1108,6 +1133,21 @@ impl Runtime {
                 lexer.catchup();
                 return Ok(StepResult::empty());
             }
+            TokenKind::String => {
+                lexer.catchup();
+                return Err(InvalidCommand(format!(
+                    "{}",
+                    format!("\"{}\"", tok.text).red().bold()
+                ))
+                .message("expected command".into(), tok.loc));
+            }
+            TokenKind::UnclosedStr => {
+                lexer.catchup();
+                return Err(
+                    InvalidCommand(format!("{}", format!("\"{}", tok.text).red().bold()))
+                        .message("expected command".into(), tok.loc),
+                );
+            }
             _invalid => {
                 return Err(InvalidCommand(format!("{}", tok.text.red().bold()))
                     .message("expected command".into(), tok.loc))
@@ -1157,13 +1197,13 @@ impl Runtime {
             ));
             res.push(format!("{}", self.shape_stack.last().unwrap()));
         } else if let Check(mut check) = apply {
-            res.extend(
-                check
-                    .matches()
-                    .unwrap()
-                    .drain(..)
-                    .map(|(from, to)| format!("{} -> {}", from, to)),
-            );
+            res.extend(check.matches().unwrap().drain(..).map(|(from, to)| {
+                format!(
+                    "{} -> {}",
+                    from.to_string().highlight(),
+                    to.to_string().highlight()
+                )
+            }));
             indent_each = true;
         }
 

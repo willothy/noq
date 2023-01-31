@@ -9,6 +9,8 @@ use crate::lexer::{Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE
 pub(crate) enum Expr {
     Sym(String),
     Var(String),
+    Num(i64),
+    Str(String),
     Fun(Box<Expr>, Vec<Expr>),
     Op(OpKind, Box<Expr>, Box<Expr>),
 }
@@ -83,7 +85,17 @@ impl Expr {
                     kind: TokenKind::Number,
                     text,
                     ..
-                } => Expr::Sym(text),
+                } => Expr::Num(text.parse()?),
+                Token {
+                    kind: TokenKind::String,
+                    text,
+                    ..
+                } => {
+                    if text.is_empty() {
+                        return Err(ParseError("Empty string".to_owned()).into());
+                    }
+                    Expr::Str(text)
+                }
                 t => return Err(ParseError(format!("Expected symbol, found {}", t)).into()),
             }
         };
@@ -179,6 +191,8 @@ impl Display for Expr {
                     _ => write!(f, "{}", rhs),
                 }
             }
+            Expr::Num(n) => write!(f, "{}", n),
+            Expr::Str(s) => write!(f, "\"{}\"", s),
         }
     }
 }

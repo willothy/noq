@@ -7,8 +7,8 @@ use anyhow::Result;
 use crossterm::{
     cursor::{self, MoveDown, MoveTo, MoveToColumn, MoveUp, Show},
     event::{read, Event, KeyCode, KeyEvent},
-    execute,
-    style::{Print, StyledContent, Stylize},
+    execute, queue,
+    style::{Color, Print, StyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use strip_ansi_escapes::strip;
@@ -45,6 +45,7 @@ pub enum HighlightKind {
     Comment,
     Path,
     Str,
+    Num,
     Keyword,
     Strategy,
     Op,
@@ -58,42 +59,55 @@ impl Highlight for String {
 
         let mut lexer = Lexer::new(self.chars().peekable());
 
+        let mut invalidate = false;
         loop {
-            match lexer.next() {
-                Some(tok) => match tok.kind {
-                    lexer::TokenKind::Comment => {
-                        highlights.insert(tok.loc.offset, (Comment, tok.text));
-                    }
-                    lexer::TokenKind::Invalid => {
-                        highlights.insert(tok.loc.offset, (Invalid, tok.text));
-                    }
-                    lexer::TokenKind::String => {
-                        highlights.insert(tok.loc.offset, (Str, format!("\"{}\"", tok.text)));
-                    }
-                    lexer::TokenKind::UnclosedStr => {
-                        highlights.insert(tok.loc.offset, (Invalid, format!("\"{}", tok.text)));
-                    }
-                    lexer::TokenKind::Path => {
-                        highlights.insert(tok.loc.offset, (Path, tok.text));
-                    }
-                    lexer::TokenKind::Rules
-                    | lexer::TokenKind::Commands
-                    | lexer::TokenKind::Reverse
-                    | lexer::TokenKind::Bang => {
-                        highlights.insert(tok.loc.offset, (Keyword, tok.text));
-                    }
-                    lexer::TokenKind::Op(_) => {
-                        highlights.insert(tok.loc.offset, (Op, tok.text));
-                    }
-                    lexer::TokenKind::Command(_) => {
-                        highlights.insert(tok.loc.offset, (Command, tok.text));
-                    }
-                    lexer::TokenKind::Strategy(_) => {
-                        highlights.insert(tok.loc.offset, (Strategy, tok.text));
-                    }
-                    _ => {}
-                },
-                None => break,
+            if invalidate {
+                while let Some(v) = lexer.next() {
+                    highlights.insert(v.loc.offset, (Invalid, v.text));
+                }
+                break;
+            } else {
+                match lexer.next() {
+                    Some(tok) => match tok.kind {
+                        lexer::TokenKind::Comment => {
+                            highlights.insert(tok.loc.offset, (Comment, tok.text));
+                        }
+                        lexer::TokenKind::Invalid => {
+                            invalidate = true;
+                            highlights.insert(tok.loc.offset, (Invalid, tok.text));
+                        }
+                        lexer::TokenKind::String => {
+                            highlights.insert(tok.loc.offset, (Str, format!("\"{}\"", tok.text)));
+                        }
+                        lexer::TokenKind::UnclosedStr => {
+                            invalidate = true;
+                            highlights.insert(tok.loc.offset, (Invalid, format!("\"{}", tok.text)));
+                        }
+                        lexer::TokenKind::Path => {
+                            highlights.insert(tok.loc.offset, (Path, tok.text));
+                        }
+                        lexer::TokenKind::Rules
+                        | lexer::TokenKind::Commands
+                        | lexer::TokenKind::Reverse
+                        | lexer::TokenKind::Bang => {
+                            highlights.insert(tok.loc.offset, (Keyword, tok.text));
+                        }
+                        lexer::TokenKind::Op(_) => {
+                            highlights.insert(tok.loc.offset, (Op, tok.text));
+                        }
+                        lexer::TokenKind::Command(_) => {
+                            highlights.insert(tok.loc.offset, (Command, tok.text));
+                        }
+                        lexer::TokenKind::Strategy(_) => {
+                            highlights.insert(tok.loc.offset, (Strategy, tok.text));
+                        }
+                        lexer::TokenKind::Number => {
+                            highlights.insert(tok.loc.offset, (Num, tok.text));
+                        }
+                        _ => {}
+                    },
+                    None => break,
+                }
             }
         }
 
@@ -110,15 +124,23 @@ impl Highlight for String {
                         chars.next();
                     }
                 }
+
                 let hl = match kind {
                     Command => format!("{}{}", hl.clone().blue(), "".reset()),
                     Comment => format!("{}{}", hl.clone().dark_magenta(), "".reset()),
                     Path => format!("{}{}", hl.clone().underlined(), "".reset()),
                     Str => format!("{}{}", hl.clone().green(), "".reset()),
+                    Num => format!(
+                        "{}{}",
+                        hl.clone().blue().italic().with(Color::AnsiValue(172)),
+                        "".reset()
+                    ),
                     Keyword => format!("{}{}", hl.clone().magenta(), "".reset()),
                     Strategy => format!("{}{}", hl.clone().yellow(), "".reset()),
                     Op => format!("{}{}", hl.clone().reset(), "".reset()),
-                    Invalid => format!("{}{}", hl.clone().dark_red(), "".reset()),
+                    Invalid => {
+                        format!("{}{}", hl.clone().dark_red().bold(), "".reset())
+                    }
                 };
                 res.push_str(&hl)
             } else {
@@ -201,7 +223,7 @@ impl Repl {
         let mut trigger_result = None;
         let trigger = trigger.as_mut();
         let mut stdout = std::io::stdout().lock();
-        execute!(stdout, crossterm::terminal::EnterAlternateScreen).unwrap();
+        queue!(stdout, crossterm::terminal::EnterAlternateScreen).unwrap();
         crossterm::terminal::enable_raw_mode().unwrap();
         let mut curr_line = 0;
 
@@ -210,7 +232,7 @@ impl Repl {
             //let line_count = display.lines().count();
 
             // clear lines of element display
-            execute!(
+            queue!(
                 stdout,
                 cursor::Hide,
                 MoveTo(0, 0),
@@ -220,7 +242,7 @@ impl Repl {
 
             // print lines of element display via crossterm raw mode
             for line in display.lines() {
-                execute!(
+                queue!(
                     stdout,
                     MoveTo(0, curr_line),
                     Clear(ClearType::CurrentLine),
@@ -231,16 +253,18 @@ impl Repl {
             }
             curr_line = 0;
 
+            stdout.flush().unwrap();
             trigger_result = trigger.on_event(read().unwrap());
         }
         trigger.on_complete(trigger_result.as_ref().unwrap());
         crossterm::terminal::disable_raw_mode().unwrap();
-        execute!(
+        queue!(
             stdout,
             crossterm::terminal::LeaveAlternateScreen,
             cursor::Show
         )
         .unwrap();
+        stdout.flush().unwrap();
         trigger_result.unwrap()
     }
 
@@ -393,7 +417,7 @@ impl Repl {
                     // Handle regular input result
                     match self.handle_input(input) {
                         Ok(StepResult {
-                            results: Some(output),
+                            results: Some(mut output),
                             cmd_for_each: cmd_per,
                             clear: do_clear,
                             ..
@@ -401,10 +425,10 @@ impl Repl {
                             clear = do_clear;
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
-                                    + self.command_history.last().unwrap(),
+                                    + &self.command_history.last().unwrap().highlight().to_string(),
                             ];
-                            for output in output.iter() {
-                                for (idx, line) in output.iter().enumerate() {
+                            for mut output in output.drain(..) {
+                                for (idx, line) in output.drain(..).enumerate() {
                                     if idx == 0 {
                                         res.push(format!(
                                             "{:width$}=> {}",
@@ -444,7 +468,7 @@ impl Repl {
                         Err(err) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
-                                    + self.command_history.last().unwrap(),
+                                    + &self.command_history.last().unwrap().highlight().to_string(),
                             ];
                             let err_col = err.location.col + prompt_len as usize;
                             res.push(format!("{:>err_col$}", "^"));
@@ -458,8 +482,7 @@ impl Repl {
                     }
                     if clear {
                         disable_raw_mode().unwrap();
-                        execute!(stdout, cursor::Hide, MoveTo(0, 0), Clear(ClearType::All))
-                            .unwrap();
+                        queue!(stdout, cursor::Hide, MoveTo(0, 0), Clear(ClearType::All)).unwrap();
                         for (idx, line) in self.prompt.iter().enumerate() {
                             if idx == self.prompt.len() - 1 {
                                 print!("{}", self.prepare_prompt_line(&line.trim_end().to_owned()));
@@ -474,7 +497,7 @@ impl Repl {
                         execute!(stdout, cursor::Show).unwrap();
                         enable_raw_mode().unwrap();
                     } else {
-                        execute!(
+                        queue!(
                             stdout,
                             cursor::Hide,
                             MoveUp(self.prompt.len() as u16),
@@ -488,7 +511,7 @@ impl Repl {
                         }
                         for line in self.result_lines_buf.iter() {
                             println!("{}", line);
-                            execute!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
+                            queue!(stdout, Clear(ClearType::FromCursorDown)).unwrap();
                         }
                         println!("");
                         for (idx, line) in self.prompt.iter().enumerate() {
@@ -508,7 +531,7 @@ impl Repl {
                 _ => {}
             }
         }
-        execute!(
+        queue!(
             stdout,
             cursor::MoveUp((self.prompt.len()).checked_sub(1).unwrap_or(0) as u16),
             MoveToColumn(0),

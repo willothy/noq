@@ -46,7 +46,7 @@ impl Rule {
         ) -> (Expr, bool) {
             use Expr::*;
             match expr {
-                Sym(_) | Var(_) => (expr.clone(), false),
+                Num(_) | Str(_) | Sym(_) | Var(_) => (expr.clone(), false),
                 Op(op, lhs, rhs) => {
                     let (new_lhs, halt) = apply_impl(rule, lhs, strategy);
                     if halt {
@@ -119,6 +119,8 @@ impl Display for Rule {
 pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
     match expr {
         Expr::Sym(_) => expr.clone(),
+        Expr::Num(_) => expr.clone(),
+        Expr::Str(_) => expr.clone(),
         Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
         Expr::Op(op, l, r) => Expr::Op(
             op.clone(),
@@ -138,6 +140,8 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
     fn match_impl(pattern: &Expr, value: &Expr, bindings: &mut Bindings) -> bool {
         use Expr::*;
         match (pattern, value) {
+            (Num(n1), Num(n2)) => n1 == n2,
+            (Str(s1), Str(s2)) => s1 == s2,
             (Sym(name1), Sym(name2)) => name1 == name2,
             (Var(name), _) => {
                 if name == "_" {

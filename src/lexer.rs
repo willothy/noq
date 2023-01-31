@@ -17,7 +17,7 @@ crate::token_kinds! {
     OpenParen = "(",
     CloseParen = ")",
     Dot,
-    DoubleDot = "..",
+    DoubleDot,
     Comma = ",",
     Equals = "=",
     Semicolon = ";",
@@ -67,6 +67,7 @@ impl Display for Token {
             TokenKind::Comment => write!(f, "Comment ({})", self.text),
             TokenKind::Strategy(_) => write!(f, "Strategy ({})", self.text),
             TokenKind::Op(_) => write!(f, "Op ({})", self.text),
+            TokenKind::String => write!(f, "\"{}\"", self.text),
             TokenKind::Command(_) => write!(f, "Command ({})", self.text),
             _ => write!(f, "'{}'", self.text),
         }
@@ -95,17 +96,6 @@ pub struct Loc {
     pub line: usize,
     pub col: usize,
     pub offset: usize,
-}
-
-impl Loc {
-    pub fn prev_col(&self) -> Self {
-        Self {
-            file: self.file.clone(),
-            line: self.line,
-            col: if self.col > 1 { self.col - 1 } else { 1 },
-            offset: if self.offset > 0 { self.offset - 1 } else { 0 },
-        }
-    }
 }
 
 impl Default for Loc {
