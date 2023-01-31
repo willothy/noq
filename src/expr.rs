@@ -79,6 +79,11 @@ impl Expr {
                     text,
                     ..
                 } => Self::var_or_sym(&text)?,
+                Token {
+                    kind: TokenKind::Number,
+                    text,
+                    ..
+                } => Expr::Sym(text),
                 t => return Err(ParseError(format!("Expected symbol, found {}", t)).into()),
             }
         };

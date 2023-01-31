@@ -1,4 +1,4 @@
-use std::{fmt::Display, iter::Peekable};
+use std::{collections::VecDeque, fmt::Display, iter::Peekable};
 
 crate::token_kinds! {
     Ident,
@@ -8,15 +8,23 @@ crate::token_kinds! {
     String,
     UnclosedStr,
     Path,
-    //Number,
+    Number,
     Rules = "rules",
     Commands = "commands",
     Reverse = "reverse",
+    Colon,
+    DoubleColon = "::",
     OpenParen = "(",
     CloseParen = ")",
+    Dot,
+    DoubleDot = "..",
     Comma = ",",
     Equals = "=",
     Semicolon = ";",
+    OpenBrace = "{",
+    CloseBrace = "}",
+    Bar = "|",
+    Bang = "!",
     -binops 2-
     Add = "+" 0,
     Sub = "-" 0,
@@ -25,14 +33,11 @@ crate::token_kinds! {
     Pow = "^" 2,
     -commands-
     Done = "done",
-    Shape = "shape",
-    Rule = "rule",
-    Apply = "apply",
     Undo = "undo",
     Redo = "redo",
     Help = "help",
     Quit = "quit",
-    Load = "load",
+    Use = "use",
     Run = "run",
     Clear = "clear",
     Save = "save",
@@ -40,11 +45,11 @@ crate::token_kinds! {
     Ls = "ls",
     Pwd = "pwd",
     -strategies-
-    ApplyNth,
     ApplyAll = "all",
     ApplyFirst = "first",
     ApplyDeep = "deep",
-    Check = "check"
+    Check = "check",
+    ApplyNth
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +137,7 @@ impl Token {
 
 pub struct Lexer<T: Iterator<Item = char>> {
     pub chars: Peekable<T>,
-    pub peeked: Option<Token>,
+    pub peeked: VecDeque<Token>,
     prev: Option<Token>,
     pub exhausted: bool,
     pub file_name: Option<String>,
@@ -296,7 +301,7 @@ macro_rules! token_kinds {
             pub fn new(chars: Peekable<T>) -> Self {
                 Self {
                     chars,
-                    peeked: None,
+                    peeked: VecDeque::new(),
                     prev: None,
                     exhausted: false,
                     file_name: None,
@@ -322,11 +327,22 @@ macro_rules! token_kinds {
 
             pub fn peek(&mut self) -> &Token {
                 let tok = self.next_token();
-                self.peeked.insert(tok)
+                self.peeked.push_front(tok);
+                self.peeked.front().unwrap()
+            }
+
+            pub fn peek_next(&mut self) -> &Token {
+                let tok = self.next_token_impl();
+                self.peeked.push_front(tok);
+                self.peeked.front().unwrap()
+            }
+
+            pub fn catchup(&mut self) {
+                self.peeked.clear();
             }
 
             pub fn next_token(&mut self) -> Token {
-                if let Some(token) = self.peeked.take() {
+                if let Some(token) = self.peeked.pop_back() {
                     token
                 } else {
                     self.next_token_impl()
@@ -361,13 +377,25 @@ macro_rules! token_kinds {
                     self.current_col += 1;
                     self.current_offset += 1;
                     match c.to_string().as_str() {
-                        $($($val => Token::new($kind, text, loc),)?)+
-                        $($op_val => Token::new(Op(OpKind::$op_kind), text, loc),)+
-                        $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text, loc),)+
-                        $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text, loc),)?)+
+                        $($($val => {
+                            self.prev = Some(Token::new($kind, text.clone(), loc.clone()));
+                            Token::new($kind, text, loc)
+                        },)?)+
+                        $($op_val => {
+                            self.prev = Some(Token::new(Op(OpKind::$op_kind), text.clone(), loc.clone()));
+                            Token::new(Op(OpKind::$op_kind), text, loc)
+                        },)+
+                        $($cmd_val => {
+                            self.prev = Some(Token::new(Command(CommandKind::$cmd_kind), text.clone(), loc.clone()));
+                            Token::new(Command(CommandKind::$cmd_kind), text, loc)
+                        },)+
+                        $($($strat_val => {
+                            self.prev = Some(Token::new(Strategy(StrategyKind::$strat_kind), text.clone(), loc.clone()));
+                            Token::new(Strategy(StrategyKind::$strat_kind), text, loc)
+                        },)?)+
                         c => {
                             let c = c.chars().nth(0).unwrap();
-                            if !c.is_alphanumeric() {
+                            if !c.is_alphanumeric() && !c.is_whitespace() {
                                 if c == '#' {
                                     while let Some(c) = self.chars.next_if(|x| *x != '\n') {
                                         self.current_offset += 1;
@@ -401,7 +429,34 @@ macro_rules! token_kinds {
                                     return Token::new(Path, text[1..text.len()].to_string(), loc);
                                 }
                                 match c {
-                                    '.' => {}
+                                    '.' => {
+                                        if self.chars.next_if(|x| *x == '.').is_some() {
+                                            self.current_offset += 1;
+                                            self.current_col += 1;
+                                            text.push('.');
+                                            let tok = Token::new(DoubleDot, text, loc);
+                                            self.prev = Some(tok.clone());
+                                            return tok;
+                                        } else {
+                                            let tok = Token::new(Dot, text, loc);
+                                            self.prev = Some(tok.clone());
+                                            return tok;
+                                        }
+                                    }
+                                    ':' => {
+                                        if let Some(c) = self.chars.next_if(|x| *x == ':') {
+                                            self.current_offset += 1;
+                                            self.current_col += 1;
+                                            text.push(c);
+                                            let tok = Token::new(DoubleColon, text, loc);
+                                            self.prev = Some(tok.clone());
+                                            return tok;
+                                        } else {
+                                            let tok = Token::new(Colon, text, loc);
+                                            self.prev = Some(tok.clone());
+                                            return tok;
+                                        }
+                                    }
                                     _ => {
                                         self.prev = Some(Token::new(Invalid, c.to_string(), loc.clone()));
                                         return Token {
@@ -416,7 +471,7 @@ macro_rules! token_kinds {
 
                             while let Some(c) = self
                                 .chars
-                                .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace())
+                                .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace() && *x != '\n')
                             {
                                 text.push(c);
                                 self.current_col += 1;
@@ -426,11 +481,11 @@ macro_rules! token_kinds {
 
                             if text.is_numeric() {
                                 if let Some(prev) = &self.prev {
-                                    if prev.kind == Command(CommandKind::Apply) {
+                                    if prev.kind == Bar || prev.kind == Bang {
                                         return Token::new(Strategy(StrategyKind::ApplyNth), text, loc);
                                     }
                                 }
-                                //return Token::new(Number, text);
+                                return Token::new(Number, text, loc);
                             }
 
                             let token = match text.as_str() {

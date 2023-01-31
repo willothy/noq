@@ -8,7 +8,7 @@ use crossterm::execute;
 
 use self::{
     lexer::Lexer,
-    runtime::{Runtime, StepResult},
+    runtime::{Runtime, StepResult, Verbosity},
 };
 
 mod expr;
@@ -108,10 +108,12 @@ fn main() -> anyhow::Result<()> {
         let source = std::fs::read_to_string(&path).unwrap();
         let mut lexer = Lexer::new(source.chars().peekable())
             .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
-        let mut context = Runtime::new();
+
+        let mut runtime = Runtime::new();
+        runtime.verbosity = Verbosity::Normal;
 
         while !lexer.exhausted {
-            match context.step(&mut lexer, false) {
+            match runtime.step(&mut lexer) {
                 Ok(StepResult {
                     results: Some(output),
                     cmd_for_each: cmd_per,

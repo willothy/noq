@@ -78,7 +78,8 @@ impl Highlight for String {
                     }
                     lexer::TokenKind::Rules
                     | lexer::TokenKind::Commands
-                    | lexer::TokenKind::Reverse => {
+                    | lexer::TokenKind::Reverse
+                    | lexer::TokenKind::Bang => {
                         highlights.insert(tok.loc.offset, (Keyword, tok.text));
                     }
                     lexer::TokenKind::Op(_) => {
@@ -128,6 +129,7 @@ impl Highlight for String {
     }
 }
 
+#[allow(unused)]
 pub fn most_likely_command(input: &str) -> Option<String> {
     let mut lexer = Lexer::new(input.chars().peekable());
     let cmd = match lexer.next() {
@@ -140,27 +142,7 @@ pub fn most_likely_command(input: &str) -> Option<String> {
     };
     use lexer::CommandKind::*;
     match cmd {
-        Apply => {
-            let _strategy = match lexer.next() {
-                Some(tok) => match tok.kind {
-                    lexer::TokenKind::Strategy(strategy) => strategy,
-                    lexer::TokenKind::Invalid => None?,
-                    _ => {
-                        for strat in STRATEGIES {
-                            if strat.starts_with(&tok.text) {
-                                return Some(strat.to_string());
-                            }
-                        }
-                        None?
-                    }
-                },
-                None => {
-                    return Some(STRATEGIES[0].to_string());
-                }
-            };
-            None?
-        }
-        Done | Shape | Rule | Undo | Redo | Help | Quit | Load | Run | Clear => None?,
+        Done | Undo | Redo | Help | Quit | Use | Run | Clear => None?,
         Save => {
             let _save_level = match lexer.next() {
                 Some(tok) => {
@@ -542,6 +524,6 @@ impl Repl {
             INPUT = str;
         }
         let mut lexer = Lexer::new(unsafe { INPUT.chars() }.peekable());
-        self.context.step(&mut lexer, false)
+        self.context.step(&mut lexer)
     }
 }
