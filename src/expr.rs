@@ -1,4 +1,4 @@
-use std::{fmt::Display, iter::Peekable};
+use std::fmt::Display;
 
 use anyhow::{bail, Result};
 use thiserror::Error;
@@ -121,10 +121,25 @@ impl TryFrom<&str> for Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
+            Expr::Fun(head, args) => {
+                match &**head {
+                    Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name)?,
+                    other => write!(f, "({})", other)?,
+                }
+                write!(f, "(")?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
             Expr::Op(op, lhs, rhs) => {
                 match lhs.as_ref() {
                     Expr::Op(sub_op, _, _) => {
-                        if sub_op.precedence() < op.precedence() {
+                        if sub_op.precedence() <= op.precedence() {
                             write!(f, "({})", lhs)?
                         } else {
                             write!(f, "{}", lhs)?
@@ -139,7 +154,7 @@ impl Display for Expr {
                 }
                 match rhs.as_ref() {
                     Expr::Op(sub_op, _, _) => {
-                        if sub_op.precedence() < op.precedence() {
+                        if sub_op.precedence() <= op.precedence() {
                             write!(f, "({})", rhs)
                         } else {
                             write!(f, "{}", rhs)
@@ -147,17 +162,6 @@ impl Display for Expr {
                     }
                     _ => write!(f, "{}", rhs),
                 }
-            }
-            Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
-            Expr::Fun(name, args) => {
-                write!(f, "{}(", name)?;
-                for (idx, arg) in args.iter().enumerate() {
-                    if idx > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", arg)?;
-                }
-                write!(f, ")")
             }
         }
     }

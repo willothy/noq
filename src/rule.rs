@@ -1,10 +1,10 @@
-use std::{collections::HashMap, fmt::Display, iter::Peekable};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     expr::Expr,
-    lexer::{Lexer, Token, TokenKind},
+    lexer::{Lexer, TokenKind},
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 use thiserror::Error;
 
 pub(crate) type Bindings = HashMap<String, Expr>;
@@ -26,6 +26,13 @@ impl Rule {
         let body = Expr::parse(&mut lexer)?;
         Ok(Self { head, body })
     }
+
+    pub fn reverse(&self) -> Self {
+        Self {
+            head: self.body.clone(),
+            body: self.head.clone(),
+        }
+    }
 }
 
 impl Rule {
@@ -39,30 +46,30 @@ impl Rule {
             match expr {
                 Sym(_) | Var(_) => (expr.clone(), false),
                 Op(op, lhs, rhs) => {
-                    let (lhs, halt) = apply_impl(rule, lhs, strategy);
+                    let (new_lhs, halt) = apply_impl(rule, lhs, strategy);
                     if halt {
-                        return (Op(op.clone(), box lhs, rhs.clone()), true);
+                        return (Op(op.clone(), box new_lhs, rhs.clone()), true);
                     }
-                    let (rhs, halt) = apply_impl(rule, rhs, strategy);
-                    (Op(op.clone(), box lhs, box rhs), halt)
+                    let (new_rhs, halt) = apply_impl(rule, rhs, strategy);
+                    (Op(op.clone(), box new_lhs, box new_rhs), halt)
                 }
                 Fun(head, args) => {
-                    let (head, halt) = apply_impl(rule, head, strategy);
+                    let (new_head, halt) = apply_impl(rule, head, strategy);
                     if halt {
-                        return (Fun(box head, args.clone()), true);
+                        return (Fun(box new_head, args.clone()), true);
                     }
                     let mut new_args = vec![];
-                    let mut halt = false;
+                    let mut halt_args = false;
                     for arg in args {
-                        if halt {
+                        if halt_args {
                             new_args.push(arg.clone());
                         } else {
                             let (arg, arg_halt) = apply_impl(rule, arg, strategy);
                             new_args.push(arg);
-                            halt = arg_halt;
+                            halt_args = arg_halt;
                         }
                     }
-                    (Fun(box head, new_args), halt)
+                    (Fun(box new_head, new_args), false)
                 }
             }
         }
@@ -70,14 +77,21 @@ impl Rule {
         fn apply_impl(rule: &Rule, expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
             if let Some(bindings) = pattern_match(&rule.head, expr) {
                 let resolution = strategy.matched();
-                let res = match resolution.action {
+                let new_expr = match resolution.action {
                     Action::Apply => substitute_bindings(&bindings, &rule.body),
                     Action::Skip => expr.clone(),
+                    Action::Check => {
+                        if let Some(matches) = strategy.matches() {
+                            matches
+                                .push((expr.clone(), substitute_bindings(&bindings, &rule.body)));
+                        }
+                        expr.clone()
+                    }
                 };
                 match resolution.state {
-                    State::Bail => (res, false),
-                    State::Halt => (res, true),
-                    State::Cont => apply_to_subexprs(rule, expr, strategy),
+                    State::Bail => (new_expr, false),
+                    State::Halt => (new_expr, true),
+                    State::Cont => apply_to_subexprs(rule, &new_expr, strategy),
                 }
             } else {
                 apply_to_subexprs(rule, expr, strategy)
@@ -103,12 +117,12 @@ impl Display for Rule {
 pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
     match expr {
         Expr::Sym(_) => expr.clone(),
+        Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
         Expr::Op(op, l, r) => Expr::Op(
             op.clone(),
             box substitute_bindings(bindings, l),
             box substitute_bindings(bindings, r),
         ),
-        Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
         Expr::Fun(head, args) => Expr::Fun(
             box substitute_bindings(bindings, head),
             args.iter()
@@ -119,7 +133,7 @@ pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
 }
 
 pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
-    fn matches(pattern: &Expr, value: &Expr, bindings: &mut Bindings) -> bool {
+    fn match_impl(pattern: &Expr, value: &Expr, bindings: &mut Bindings) -> bool {
         use Expr::*;
         match (pattern, value) {
             (Sym(name1), Sym(name2)) => name1 == name2,
@@ -134,14 +148,14 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                 }
             }
             (Op(opl, l1, r1), Op(opr, l2, r2)) => {
-                opl == opr && matches(l1, l2, bindings) && matches(r1, r2, bindings)
+                opl == opr && match_impl(l1, l2, bindings) && match_impl(r1, r2, bindings)
             }
             (Fun(pat_name, pat_args), Expr::Fun(val_name, val_args)) => {
-                if matches(pat_name, val_name, bindings) && pat_args.len() == val_args.len() {
+                if match_impl(pat_name, val_name, bindings) && pat_args.len() == val_args.len() {
                     pat_args
                         .iter()
                         .zip(val_args.iter())
-                        .all(|(pat_arg, val_arg)| matches(pat_arg, val_arg, bindings))
+                        .all(|(pat_arg, val_arg)| match_impl(pat_arg, val_arg, bindings))
                 } else {
                     false
                 }
@@ -152,7 +166,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
 
     let mut bindings = Bindings::new();
 
-    if matches(pattern, value, &mut bindings) {
+    if match_impl(pattern, value, &mut bindings) {
         Some(bindings)
     } else {
         None
@@ -162,6 +176,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
 pub enum Action {
     #[allow(dead_code)]
     Skip,
+    Check,
     Apply,
 }
 
@@ -179,14 +194,43 @@ pub struct Resolution {
     state: State,
 }
 
-pub trait Strategy {
+pub(crate) trait Strategy {
     fn matched(&mut self) -> Resolution;
+    fn matches(&mut self) -> Option<&mut Vec<(Expr, Expr)>> {
+        None
+    }
 }
 
 // Strategies
+pub struct ApplyCheck {
+    matches: Vec<(Expr, Expr)>,
+}
 pub struct ApplyAll;
 pub struct ApplyFirst;
 pub struct ApplyDeep;
+pub struct ApplyNth {
+    current: usize,
+    target: usize,
+}
+
+impl ApplyCheck {
+    pub fn new() -> Self {
+        Self { matches: vec![] }
+    }
+}
+
+impl Strategy for ApplyCheck {
+    fn matched(&mut self) -> Resolution {
+        Resolution {
+            action: Action::Check,
+            state: State::Cont,
+        }
+    }
+
+    fn matches(&mut self) -> Option<&mut Vec<(Expr, Expr)>> {
+        Some(&mut self.matches)
+    }
+}
 
 impl Strategy for ApplyAll {
     fn matched(&mut self) -> Resolution {
@@ -211,6 +255,34 @@ impl Strategy for ApplyDeep {
         Resolution {
             action: Action::Apply,
             state: State::Cont,
+        }
+    }
+}
+
+impl ApplyNth {
+    pub fn new(target: usize) -> Self {
+        Self { current: 0, target }
+    }
+}
+
+impl Strategy for ApplyNth {
+    fn matched(&mut self) -> Resolution {
+        if self.current == self.target {
+            Resolution {
+                action: Action::Apply,
+                state: State::Halt,
+            }
+        } else if self.current > self.target {
+            Resolution {
+                action: Action::Skip,
+                state: State::Halt,
+            }
+        } else {
+            self.current += 1;
+            Resolution {
+                action: Action::Skip,
+                state: State::Cont,
+            }
         }
     }
 }

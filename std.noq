@@ -1,0 +1,15 @@
+rule 1 1 = s(0)
+rule 2 2 = s(1)
+rule 3 3 = s(2)
+rule 4 4 = s(3)
+rule add_id 0 + A = A
+rule sub_id 0 - A = A
+rule add s(A) + B = s(A + B)
+rule final s(N) = N + 1
+rule square A^2 = A*A
+rule square1 A*A = A^2
+rule dist_mul_add A*(B + C) = A*B + A*C
+rule mul_comm A*B = B*A
+rule sum_assoc (A + B) + C = A + (B + C)
+rule sum_assoc1 A + (B + C) = (A + B) + C
+rule double_sum A + A = 2*A

@@ -3,19 +3,20 @@ use std::{
     io::{stdout, Write},
 };
 
+use anyhow::Result;
 use crossterm::{
-    cursor::{self, MoveDown, MoveToColumn, MoveUp, Show},
+    cursor::{self, MoveDown, MoveTo, MoveToColumn, MoveUp, Show},
     event::{read, Event, KeyCode, KeyEvent},
     execute,
     style::{Print, StyledContent, Stylize},
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    context::Context,
     lexer::{self, Lexer},
+    runtime::{Runtime, StepResult},
 };
 
 pub struct Repl {
@@ -26,14 +27,12 @@ pub struct Repl {
     history_index: usize,
     insert: usize,
     quit: bool,
-    context: Context,
+    context: Runtime,
 }
 
 #[derive(Debug, Error)]
 #[error("Error: {0}")]
 struct ReplError(String);
-
-type ReplResult = anyhow::Result<Option<String>>;
 
 static mut INPUT: String = String::new();
 
@@ -154,19 +153,9 @@ impl Repl {
                 .map(|v| v.replace("\\e", "\x1b"))
                 .map(|v| v.replace("\\n", "\n"))
                 .map(|v| v.replace("\\r", "\r"))
-                .map(|v| v.replace("\\u", "noq"))
-                .map(|v| {
-                    v.replace(
-                        "\\h",
-                        std::env::var("HOSTNAME")
-                            .unwrap_or_else(|_| "hostname".to_string())
-                            .as_str(),
-                    )
-                })
-                .map(|v| v.replace("\\w", std::env::current_dir().unwrap().to_str().unwrap()))
                 .map(|v| v.replace("\\$", "$"))
                 //.map(|v| snailquote::unescape(&v).unwrap())
-                .unwrap_or_else(|_| "noq >".to_string())
+                .unwrap_or_else(|_| "noq > ".to_string())
                 .lines()
                 .map(|s| s.to_string())
                 .collect(),
@@ -176,9 +165,55 @@ impl Repl {
             command_history: Vec::new(),
             history_index: 0,
             quit: false,
-            context: Context::new(),
+            context: Runtime::new(),
         };
         repl.context.quiet = false;
+        repl.context.interaction_hook = Some(Box::new(|mut trigger| {
+            let mut trigger_result = None;
+            let trigger = trigger.as_mut();
+            let mut stdout = std::io::stdout().lock();
+            execute!(stdout, crossterm::terminal::EnterAlternateScreen).unwrap();
+            crossterm::terminal::enable_raw_mode().unwrap();
+            let mut curr_line = 0;
+
+            while trigger_result.is_none() {
+                let display = trigger.display();
+                //let line_count = display.lines().count();
+
+                // clear lines of element display
+                execute!(
+                    stdout,
+                    cursor::Hide,
+                    MoveTo(0, 0),
+                    Clear(ClearType::FromCursorDown)
+                )
+                .unwrap();
+
+                // print lines of element display via crossterm raw mode
+                for line in display.lines() {
+                    execute!(
+                        stdout,
+                        MoveTo(0, curr_line),
+                        Clear(ClearType::CurrentLine),
+                        Print(line),
+                    )
+                    .unwrap();
+                    curr_line += 1;
+                }
+                curr_line = 0;
+
+                trigger_result = trigger.on_event(read().unwrap());
+            }
+            trigger.on_complete(trigger_result.as_ref().unwrap());
+            crossterm::terminal::disable_raw_mode().unwrap();
+            execute!(
+                stdout,
+                crossterm::terminal::LeaveAlternateScreen,
+                cursor::Show
+            )
+            .unwrap();
+            trigger_result.unwrap()
+        }));
         repl.run_loop();
     }
 
@@ -188,6 +223,15 @@ impl Repl {
             .show_shape()
             .unwrap_or("noq".to_string())
             .clone();
+        let line = line.replace("\\u", "noq");
+        let line = line.replace(
+            "\\h",
+            std::env::var("HOSTNAME")
+                .unwrap_or_else(|_| "hostname".to_string())
+                .as_str(),
+        );
+        let line = line.replace("\\w", std::env::current_dir().unwrap().to_str().unwrap());
+
         line.replace("\\s", &shape)
     }
 
@@ -317,28 +361,58 @@ impl Repl {
                     self.insert = 0;
                     let input = self.input_buf.drain(..).collect();
 
+                    // Handle regular input result
                     match self.handle_input(input) {
-                        Ok(Some(output)) => {
+                        Ok(StepResult {
+                            results: Some(output),
+                            cmd_for_each: cmd_per,
+                            clear,
+                            ..
+                        }) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
-                                    + " "
                                     + self.command_history.last().unwrap(),
                             ];
-                            res.push(format!(
-                                "{:width$}=> {}",
-                                " ",
-                                output,
-                                width = prompt_len as usize
-                            ));
+                            for output in output.iter() {
+                                for (idx, line) in output.iter().enumerate() {
+                                    if idx == 0 {
+                                        res.push(format!(
+                                            "{:width$}=> {}",
+                                            " ",
+                                            line,
+                                            width = prompt_len as usize
+                                        ));
+                                    } else {
+                                        if cmd_per {
+                                            res.push(format!(
+                                                "{:width$}=> {}",
+                                                " ",
+                                                line,
+                                                width = prompt_len as usize
+                                            ));
+                                        } else {
+                                            res.push(format!(
+                                                "{:width$}   {}",
+                                                " ",
+                                                line,
+                                                width = prompt_len as usize
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
                             self.result_lines_buf = res;
+                            if clear {
+                                self.result_lines_buf.clear();
+                                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All)).unwrap();
+                            }
                         }
-                        Ok(None) => {
+                        Ok(StepResult { results: None, .. }) => {
                             self.result_lines_buf = vec![];
                         }
                         Err(err) => {
                             let mut res = vec![
                                 self.prepare_prompt_line(&self.prompt.last().unwrap().clone())
-                                    + " "
                                     + self.command_history.last().unwrap(),
                             ];
                             res.extend(
@@ -387,12 +461,12 @@ impl Repl {
         disable_raw_mode().unwrap();
     }
 
-    pub fn handle_input(&mut self, str: String) -> ReplResult {
+    pub fn handle_input(&mut self, str: String) -> Result<StepResult> {
         unsafe {
             INPUT = str;
         }
         let mut lexer = Lexer::new(unsafe { INPUT.chars() }.peekable());
-        let out = self.context.step(&mut lexer)?;
+        let out = self.context.step(&mut lexer, false)?;
         return Ok(out);
     }
 }

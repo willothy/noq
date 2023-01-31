@@ -3,13 +3,18 @@
 
 use std::env::args;
 
-use self::{context::Context, lexer::Lexer};
+use crossterm::execute;
 
-mod context;
+use self::{
+    lexer::Lexer,
+    runtime::{Runtime, StepResult},
+};
+
 mod expr;
 mod lexer;
 mod repl;
 mod rule;
+mod runtime;
 mod tests;
 
 #[macro_export]
@@ -100,12 +105,38 @@ fn main() -> anyhow::Result<()> {
     if let Some(file) = args().nth(1) {
         let source = std::fs::read_to_string(file).unwrap();
         let mut lexer = Lexer::new(source.chars().peekable());
-        let mut context = Context::new();
+        let mut context = Runtime::new();
 
         while !lexer.exhausted {
-            match context.step(&mut lexer) {
-                Ok(Some(output)) => println!(" => {}", output),
-                Ok(None) => (),
+            match context.step(&mut lexer, false) {
+                Ok(StepResult {
+                    results: Some(output),
+                    cmd_for_each: cmd_per,
+                    clear,
+                    ..
+                }) => {
+                    if clear {
+                        execute!(
+                            std::io::stdout(),
+                            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+                        )
+                        .unwrap();
+                    }
+                    for (idx, out) in output.iter().enumerate() {
+                        for line in out {
+                            if cmd_per {
+                                println!(" => {}", line);
+                            } else {
+                                if idx == 0 {
+                                    println!("=> {}", line);
+                                } else {
+                                    println!("{}", line);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(StepResult { results: None, .. }) => (),
                 Err(e) => {
                     println!(" !> {}", e);
                     break;

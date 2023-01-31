@@ -1,10 +1,16 @@
-use std::{iter::Peekable, str::Chars};
+use std::iter::Peekable;
 
 crate::token_kinds! {
     Ident,
     Comment,
     Invalid,
     Eof,
+    String,
+    Path,
+    //Number,
+    Rules = "rules",
+    Commands = "commands",
+    Reverse = "reverse",
     OpenParen = "(",
     CloseParen = ")",
     Comma = ",",
@@ -26,10 +32,18 @@ crate::token_kinds! {
     Help = "help",
     Quit = "quit",
     Load = "load",
+    Run = "run",
+    Clear = "clear",
+    Save = "save",
+    Cd = "cd",
+    Ls = "ls",
+    Pwd = "pwd",
     -strategies-
-    All = "all",
-    First = "first",
-    Deep = "deep",
+    ApplyNth,
+    ApplyAll = "all",
+    ApplyFirst = "first",
+    ApplyDeep = "deep",
+    Check = "check"
 }
 
 #[derive(Debug, Clone)]
@@ -47,8 +61,19 @@ impl Token {
 pub struct Lexer<T: Iterator<Item = char>> {
     pub chars: Peekable<T>,
     pub peeked: Option<Token>,
+    prev: Option<Token>,
     pub exhausted: bool,
     pub text: String,
+}
+
+pub trait IsNumeric {
+    fn is_numeric(&self) -> bool;
+}
+
+impl IsNumeric for String {
+    fn is_numeric(&self) -> bool {
+        self.chars().all(|c| c.is_numeric())
+    }
 }
 
 #[macro_export]
@@ -59,8 +84,8 @@ macro_rules! count {
 
 #[macro_export]
 macro_rules! ignore {
-    ($first:ident, $last:expr) => {
-        $last
+    ($keep:ident, $rest:tt) => {
+        $keep
     };
 }
 
@@ -95,7 +120,7 @@ macro_rules! token_kinds {
         -commands-
         $($cmd_kind:ident = $cmd_val:literal),+$(,)?
         -strategies-
-        $($strat_kind:ident = $strat_val:literal),+$(,)?
+        $($strat_kind:ident $(= $strat_val:literal)?),+$(,)?
     ) => {
         #[derive(Debug, PartialEq, Clone)]
         pub enum TokenKind {
@@ -166,9 +191,9 @@ macro_rules! token_kinds {
         ];
 
         #[allow(dead_code)]
-        pub const STRATEGIES: [&str; crate::count!($($strat_val)+)] = [
+        pub const STRATEGIES: [&str; crate::count!($($strat_kind)+)] = [
             $(
-                casey::lower!($strat_val)
+                casey::lower!(stringify!($strat_kind))
             ),+
         ];
 
@@ -190,6 +215,7 @@ macro_rules! token_kinds {
                 Self {
                     chars,
                     peeked: None,
+                    prev: None,
                     exhausted: false,
                     text: String::new(),
                 }
@@ -227,7 +253,7 @@ macro_rules! token_kinds {
                         $($($val => Token::new($kind, text),)?)+
                         $($op_val => Token::new(Op(OpKind::$op_kind), text),)+
                         $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text),)+
-                        $($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)+
+                        $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)?)+
                         c => {
                             let c = c.chars().nth(0).unwrap();
                             if !c.is_alphanumeric() {
@@ -235,12 +261,34 @@ macro_rules! token_kinds {
                                     while let Some(c) = self.chars.next_if(|x| *x != '\n') {
                                         text.push(c);
                                     }
+                                    self.prev = Some(Token::new(Comment, text.clone()));
                                     return Token::new(Comment, text);
                                 }
-                                return Token {
-                                    kind: Invalid,
-                                    text: c.to_string(),
-                                };
+                                if c == '"' {
+                                    while let Some(c) = self.chars.next_if(|x| *x != '"') {
+                                        text.push(c);
+                                    }
+                                    self.prev = Some(Token::new(String, text[1..text.len() - 1].to_string()));
+                                    return Token::new(String, text[1..text.len() - 1].to_string());
+                                }
+                                if c == '@' {
+                                    while let Some(c) = self.chars.next_if(|x| !x.is_whitespace()) {
+                                        text.push(c);
+                                    }
+                                    self.prev = Some(Token::new(Path, text[1..text.len()].to_string()));
+                                    return Token::new(Path, text[1..text.len()].to_string());
+                                }
+                                match c {
+                                    '.' => {}
+                                    _ => {
+                                        self.prev = Some(Token::new(Invalid, c.to_string()));
+                                        return Token {
+                                            kind: Invalid,
+                                            text: c.to_string(),
+                                        };
+                                    }
+                                }
+
                             }
 
                             while let Some(c) = self
@@ -250,13 +298,25 @@ macro_rules! token_kinds {
                                 text.push(c);
                             }
 
-                            match text.as_str() {
+
+                            if text.is_numeric() {
+                                if let Some(prev) = &self.prev {
+                                    if prev.kind == Command(CommandKind::Apply) {
+                                        return Token::new(Strategy(StrategyKind::ApplyNth), text);
+                                    }
+                                }
+                                //return Token::new(Number, text);
+                            }
+
+                            let token = match text.as_str() {
                                 $($($val => Token::new($kind, text),)?)+
                                 $($op_val => Token::new(Op(OpKind::$op_kind), text),)+
                                 $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text),)+
-                                $($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)+
+                                $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text),)?)+
                                 _ => Token::new(Ident, text),
-                            }
+                            };
+                            self.prev = Some(token.clone());
+                            token
                         }
                     }
                 } else {
