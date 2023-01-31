@@ -55,23 +55,27 @@ impl Rule {
                     let (new_rhs, halt) = apply_impl(rule, rhs, strategy);
                     (Op(op.clone(), box new_lhs, box new_rhs), halt)
                 }
-                Fun(head, args) => {
+                Fun(head, body) => {
                     let (new_head, halt) = apply_impl(rule, head, strategy);
                     if halt {
-                        return (Fun(box new_head, args.clone()), true);
+                        return (Fun(box new_head, body.clone()), true);
                     }
-                    let mut new_args = vec![];
-                    let mut halt_args = false;
-                    for arg in args {
-                        if halt_args {
-                            new_args.push(arg.clone());
+                    let new_body = apply_impl(rule, body, strategy).0;
+                    (Fun(box new_head, box new_body), false)
+                }
+                List(elements) => {
+                    let mut new_elements = vec![];
+                    let mut halt_elements = false;
+                    for arg in elements {
+                        if halt_elements {
+                            new_elements.push(arg.clone());
                         } else {
                             let (arg, arg_halt) = apply_impl(rule, arg, strategy);
-                            new_args.push(arg);
-                            halt_args = arg_halt;
+                            new_elements.push(arg);
+                            halt_elements = arg_halt;
                         }
                     }
-                    (Fun(box new_head, new_args), false)
+                    (List(new_elements), false)
                 }
             }
         }
@@ -127,11 +131,15 @@ pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
             box substitute_bindings(bindings, l),
             box substitute_bindings(bindings, r),
         ),
-        Expr::Fun(head, args) => Expr::Fun(
+        Expr::Fun(head, body) => Expr::Fun(
             box substitute_bindings(bindings, head),
-            args.iter()
-                .map(|arg| substitute_bindings(bindings, arg))
-                .collect::<Vec<_>>(),
+            box substitute_bindings(bindings, body),
+        ),
+        Expr::List(elements) => Expr::List(
+            elements
+                .iter()
+                .map(|el| substitute_bindings(bindings, el))
+                .collect(),
         ),
     }
 }
@@ -156,14 +164,17 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
             (Op(opl, l1, r1), Op(opr, l2, r2)) => {
                 opl == opr && match_impl(l1, l2, bindings) && match_impl(r1, r2, bindings)
             }
-            (Fun(pat_name, pat_args), Expr::Fun(val_name, val_args)) => {
-                if match_impl(pat_name, val_name, bindings) && pat_args.len() == val_args.len() {
-                    pat_args
-                        .iter()
-                        .zip(val_args.iter())
-                        .all(|(pat_arg, val_arg)| match_impl(pat_arg, val_arg, bindings))
-                } else {
+            (Fun(pat_name, pat_body), Expr::Fun(val_name, val_body)) => {
+                match_impl(pat_name, val_name, bindings) && match_impl(pat_body, val_body, bindings)
+            }
+            (List(pat_elements), List(val_elements)) => {
+                if pat_elements.len() != val_elements.len() {
                     false
+                } else {
+                    pat_elements
+                        .iter()
+                        .zip(val_elements.iter())
+                        .all(|(pat, val)| match_impl(pat, val, bindings))
                 }
             }
             _ => false,

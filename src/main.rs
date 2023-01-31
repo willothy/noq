@@ -24,78 +24,6 @@ mod rule;
 mod runtime;
 mod tests;
 
-#[macro_export]
-macro_rules! fun_args {
-    () => {
-        vec![]
-    };
-    ($name:ident) => {
-        vec![expr!($name)]
-    };
-    ($name:ident, $($rest:tt)*) => {
-        {
-            let mut t = vec![expr!( $name )];
-            t.append(&mut fun_args!( $($rest)* ));
-            t
-        }
-    };
-    ($name:ident($($args:tt)*)) => {
-        vec![expr!($name($($args)*))]
-    };
-    ($name:ident($($args:tt)*), $($rest:tt)*) => {
-        {
-            let mut t = vec![expr!($name($($args)*))];
-            t.append(&mut fun_args!( $($rest)* ));
-            t
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! expr {
-    ($source:literal) => {
-        crate::rule::Expr::parse(crate::lexer::Lexer::new($source))
-    };
-    ($name:ident) => {
-        if stringify!($name).chars().nth(0).unwrap().is_uppercase() {
-            crate::expr::Expr::Var(stringify!($name).to_string())
-        } else {
-            crate::expr::Expr::Sym(stringify!($name).to_string())
-        }
-    };
-    ($name:ident($($args:tt)*)) => {
-        crate::expr::Expr::Fun(box expr!($name), fun_args!( $($args)* ))
-    };
-}
-
-#[macro_export]
-macro_rules! rule {
-    ($head:ident = $body:tt) => {
-        crate::rule::Rule {
-            head: expr!($head),
-            body: expr!($body),
-        }
-    };
-    ($head:ident = $body:ident($($body_args:tt)*)) => {
-        crate::rule::Rule {
-            head: expr!($head),
-            body: expr!($body($($body_args)*)),
-        }
-    };
-    ($head:ident($($args:tt)*) = $body:tt) => {
-        crate::rule::Rule {
-            head: expr!($head($($args)*)),
-            body: expr!($body),
-        }
-    };
-    ($head:ident($($args:tt)*) = $body:ident($($body_args:tt)*)) => {
-        crate::rule::Rule {
-            head: expr!($head($($args)*)),
-            body: expr!($body($($body_args)*)),
-        }
-    };
-}
-
 fn collect_subexprs<'a>(pattern: &'a Expr, expr: &'a Expr) -> Vec<&'a Expr> {
     let mut subexprs = vec![];
 
@@ -105,10 +33,13 @@ fn collect_subexprs<'a>(pattern: &'a Expr, expr: &'a Expr) -> Vec<&'a Expr> {
         }
 
         match expr {
-            Expr::Fun(head, args) => {
+            Expr::Fun(head, body) => {
                 match_all_inner(pattern, head, subexprs);
-                for arg in args {
-                    match_all_inner(pattern, arg, subexprs);
+                match_all_inner(pattern, body, subexprs)
+            }
+            Expr::List(elements) => {
+                for element in elements {
+                    match_all_inner(pattern, element, subexprs);
                 }
             }
             Expr::Op(_, lhs, rhs) => {
@@ -134,28 +65,36 @@ fn write_subexpr_highlighted(
 ) -> fmt::Result {
     let highlight = pattern_match(expr, subexprs[idx]).is_some() || parent_highlight;
     match expr {
-        Expr::Fun(head, args) => {
+        Expr::List(elements) => {
             if highlight {
-                write_subexpr_highlighted(head, subexprs, idx, style, highlight, writer)?;
                 write!(writer, "{}", style.apply("("))?;
-                for (idx, arg) in args.iter().enumerate() {
-                    write_subexpr_highlighted(arg, subexprs, idx, style, highlight, writer)?;
-                    if idx + 1 < args.len() {
+                for (i, element) in elements.iter().enumerate() {
+                    write_subexpr_highlighted(element, subexprs, idx, style, highlight, writer)?;
+                    if i + 1 < elements.len() {
                         write!(writer, "{}", style.apply(", "))?;
                     }
                 }
                 write!(writer, "{}", style.apply(")"))
             } else {
-                write_subexpr_highlighted(head, subexprs, idx, style, highlight, writer)?;
-                write!(writer, "(")?;
-                for arg in args {
-                    write_subexpr_highlighted(arg, subexprs, idx, style, highlight, writer)?;
-                    if idx + 1 < args.len() {
+                write!(writer, "{}", "(")?;
+                for (i, element) in elements.iter().enumerate() {
+                    write_subexpr_highlighted(element, subexprs, idx, style, highlight, writer)?;
+                    if i + 1 < elements.len() {
                         write!(writer, "{}", ", ")?;
                     }
                 }
-                write!(writer, ")")
+                write!(writer, "{}", ")")
             }
+        }
+        Expr::Fun(head, body) => {
+            if highlight {
+                write_subexpr_highlighted(head, subexprs, idx, style, highlight, writer)?;
+                write_subexpr_highlighted(body, subexprs, idx, style, highlight, writer)?;
+            } else {
+                write_subexpr_highlighted(head, subexprs, idx, style, highlight, writer)?;
+                write_subexpr_highlighted(body, subexprs, idx, style, highlight, writer)?;
+            }
+            Ok(())
         }
         Expr::Op(op, lhs, rhs) => {
             if highlight {

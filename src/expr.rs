@@ -11,8 +11,9 @@ pub(crate) enum Expr {
     Var(String),
     Num(i64),
     Str(String),
-    Fun(Box<Expr>, Vec<Expr>),
+    Fun(Box<Expr>, Box<Expr>),
     Op(OpKind, Box<Expr>, Box<Expr>),
+    List(Vec<Expr>),
 }
 
 #[derive(Debug, Error)]
@@ -32,7 +33,7 @@ impl Expr {
             .unwrap_or(Expr::Sym(name.to_owned())))
     }
 
-    fn parse_fun_args(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Self>> {
+    fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Self>> {
         use TokenKind::*;
         if lexer.next_if(|tok| tok.kind == OpenParen).is_none() {
             return Err(ParseError(format!(
@@ -67,14 +68,38 @@ impl Expr {
                     ..
                 } => {
                     let result = Self::parse(lexer)?;
-                    if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
+                    /* if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
                         return Err(ParseError(format!(
                             "Expected ')', got {}",
                             lexer.next().unwrap_string()
                         ))
                         .into());
                     }
-                    result
+                    result */
+                    if lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+                        let mut result = vec![result, Self::parse(lexer)?];
+                        while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+                            result.push(Self::parse(lexer)?);
+                            println!("peek: {:?}", lexer.peek());
+                        }
+                        if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
+                            return Err(ParseError(format!(
+                                "Expected ')', got {}",
+                                lexer.next().unwrap_string()
+                            ))
+                            .into());
+                        }
+                        Expr::List(result)
+                    } else {
+                        if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
+                            return Err(ParseError(format!(
+                                "Expected ')', got {}",
+                                lexer.next().unwrap_string()
+                            ))
+                            .into());
+                        }
+                        result
+                    }
                 }
                 Token {
                     kind: TokenKind::Ident,
@@ -105,7 +130,7 @@ impl Expr {
             ..
         } = lexer.peek()
         {
-            head = Expr::Fun(box head, Self::parse_fun_args(lexer)?);
+            head = Expr::Fun(box head, box Expr::List(Self::parse_list(lexer)?));
         }
         Ok(head)
     }
@@ -149,18 +174,33 @@ impl TryFrom<&str> for Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Expr::List(exprs) => {
+                write!(f, "(")?;
+                for (i, expr) in exprs.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", expr)?;
+                }
+                write!(f, ")")
+            }
             Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
-            Expr::Fun(head, args) => {
+            Expr::Fun(head, body) => {
                 match &**head {
                     Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name)?,
                     other => write!(f, "({})", other)?,
                 }
                 write!(f, "(")?;
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?
+                match &**body {
+                    Expr::List(exprs) => {
+                        for (i, expr) in exprs.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            write!(f, "{}", expr)?;
+                        }
                     }
-                    write!(f, "{}", arg)?;
+                    other => write!(f, "{}", other)?,
                 }
                 write!(f, ")")
             }

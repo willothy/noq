@@ -1139,14 +1139,6 @@ impl Runtime {
                 lexer.catchup();
                 return Ok(StepResult::empty());
             }
-            TokenKind::String => {
-                lexer.catchup();
-                return Err(InvalidCommand(format!(
-                    "{}",
-                    format!("\"{}\"", tok.text).red().bold()
-                ))
-                .message("expected command".into(), tok.loc));
-            }
             TokenKind::UnclosedStr => {
                 lexer.catchup();
                 return Err(
@@ -1154,10 +1146,7 @@ impl Runtime {
                         .message("expected command".into(), tok.loc),
                 );
             }
-            _invalid => {
-                return Err(InvalidCommand(format!("{}", tok.text.red().bold()))
-                    .message("expected command".into(), tok.loc))
-            }
+            _maybe_expr => self.cmd_def_shape(lexer),
         }
     }
 
