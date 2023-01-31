@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, iter::Peekable};
+use std::{collections::VecDeque, fmt::Display, iter::Peekable, str::Chars};
 
 crate::token_kinds! {
     Ident,
@@ -134,6 +134,12 @@ pub struct Lexer<T: Iterator<Item = char>> {
     pub current_line: usize,
     pub current_col: usize,
     pub current_offset: usize,
+}
+
+impl<'a> From<&'a str> for Lexer<Chars<'a>> {
+    fn from(s: &'a str) -> Self {
+        Self::new(s.chars().peekable())
+    }
 }
 
 pub trait IsNumeric {
@@ -462,6 +468,7 @@ macro_rules! token_kinds {
                                             return tok;
                                         }
                                     }
+                                    '_' => {}
                                     _ => {
                                         self.prev = Some(Token::new(Invalid, c.to_string(), loc.clone()));
                                         return Token {
@@ -474,7 +481,7 @@ macro_rules! token_kinds {
 
                             }
 
-                            if c.is_alphanumeric() {
+                            if c.is_alphanumeric() || c == '_' {
                                 while let Some(c) = self
                                     .chars
                                     .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace() && *x != '\n')

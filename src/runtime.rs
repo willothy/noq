@@ -748,7 +748,7 @@ impl Runtime {
         }
     }
 
-    fn cmd_all_rules(
+    fn cmd_for_all_rules(
         &mut self,
         lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
@@ -795,7 +795,13 @@ impl Runtime {
                         no_matches.push(name.to_owned());
                     } else {
                         new.push(format!("{}:", name.to_owned().green()));
-                        new.extend(sub_result.0.iter().map(|s| format!("-> {}", s)));
+                        new.extend(
+                            sub_result
+                                .0
+                                .iter()
+                                .enumerate()
+                                .map(|(idx, s)| format!("{}> {}", idx, s)),
+                        );
                         r.push(new);
                     }
                 }
@@ -1113,7 +1119,7 @@ impl Runtime {
             Command(CommandKind::Pwd) => self.cmd_pwd(lexer),
             Command(CommandKind::Cd) => self.cmd_cd(lexer),
             CloseBrace | Command(CommandKind::Done) => self.cmd_done(lexer),
-            DoubleDot => self.cmd_all_rules(lexer),
+            DoubleDot => self.cmd_for_all_rules(lexer),
             DoubleColon => self.cmd_anon_rule(lexer),
             Ident => {
                 let name = tok.text.clone();

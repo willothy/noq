@@ -27,7 +27,7 @@ impl Expr {
         Ok(name
             .chars()
             .nth(0)
-            .filter(|c| c.is_uppercase())
+            .filter(|c| c.is_uppercase() || *c == '_')
             .map(|_| Expr::Var(name.to_owned()))
             .unwrap_or(Expr::Sym(name.to_owned())))
     }
