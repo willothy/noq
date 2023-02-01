@@ -1295,7 +1295,7 @@ impl Runtime {
             }
             res.extend(matches_str);
 
-            indent_each = true;
+            indent_each = false;
         }
 
         Ok(Some((res, indent_each, false)))

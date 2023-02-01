@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     expr::Expr,
-    lexer::{Lexer, TokenKind},
+    lexer::{Constraint, Lexer, TokenKind},
 };
 use anyhow::Result;
 use thiserror::Error;
@@ -46,7 +46,7 @@ impl Rule {
         ) -> (Expr, bool) {
             use Expr::*;
             match expr {
-                Num(_) | Str(_) | Sym(_) | Var(_) => (expr.clone(), false),
+                Num(_) | Str(_) | Sym(_) | Var(_, _) => (expr.clone(), false),
                 Op(op, lhs, rhs) => {
                     let (new_lhs, halt) = apply_impl(rule, lhs, strategy);
                     if halt {
@@ -125,7 +125,7 @@ pub(crate) fn substitute_bindings(bindings: &Bindings, expr: &Expr) -> Expr {
         Expr::Sym(_) => expr.clone(),
         Expr::Num(_) => expr.clone(),
         Expr::Str(_) => expr.clone(),
-        Expr::Var(name) => bindings.get(name).unwrap_or(expr).clone(),
+        Expr::Var(name, _) => bindings.get(name).unwrap_or(expr).clone(),
         Expr::Op(op, l, r) => Expr::Op(
             op.clone(),
             box substitute_bindings(bindings, l),
@@ -151,14 +151,29 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
             (Num(n1), Num(n2)) => n1 == n2,
             (Str(s1), Str(s2)) => s1 == s2,
             (Sym(name1), Sym(name2)) => name1 == name2,
-            (Var(name), _) => {
+            (Var(name, constraint), other) => {
+                use Constraint::*;
+                let matches_constraint = match (constraint, &other) {
+                    (Sym, Expr::Sym(_))
+                    | (Num, Expr::Num(_))
+                    | (Str, Expr::Str(_))
+                    | (List, Expr::List(_))
+                    | (Fun, Expr::Fun(_, _))
+                    | (None, _) => true,
+                    (_, Expr::Var(_, other_constraint)) => {
+                        constraint == other_constraint || *other_constraint == Constraint::None
+                    }
+                    _ => false,
+                };
                 if name == "_" {
-                    true
+                    matches_constraint
                 } else if let Some(existing) = bindings.get(name) {
-                    existing == value
+                    matches_constraint && existing == value
                 } else {
-                    bindings.insert(name.clone(), value.clone());
-                    true
+                    if matches_constraint {
+                        bindings.insert(name.clone(), value.clone());
+                    }
+                    matches_constraint
                 }
             }
             (Op(opl, l1, r1), Op(opr, l2, r2)) => {
@@ -168,7 +183,9 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                 match_impl(pat_name, val_name, bindings) && match_impl(pat_body, val_body, bindings)
             }
             (List(pat_elements), List(val_elements)) => {
-                if pat_elements.len() == 1 && &pat_elements[0] == &Expr::Var("_".to_string()) {
+                if pat_elements.len() == 1
+                /* && &pat_elements[0] == &Expr::Var("_".to_string(), ) */
+                {
                     true
                 } else if pat_elements.len() != val_elements.len() {
                     false

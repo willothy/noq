@@ -4,14 +4,14 @@ use anyhow::{bail, Result};
 use thiserror::Error;
 
 use crate::{
-    lexer::{Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE},
+    lexer::{Constraint, Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE},
     rule::{pattern_match, Action, Bindings, State, Strategy},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
     Sym(String),
-    Var(String),
+    Var(String, Constraint),
     Num(i64),
     Str(String),
     Fun(Box<Expr>, Box<Expr>),
@@ -41,7 +41,7 @@ impl Expr {
         fn eval_subexprs(expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
             use Expr::*;
             match expr {
-                Sym(_) | Var(_) | Num(_) | Str(_) => (expr.clone(), false),
+                Sym(_) | Var(_, _) | Num(_) | Str(_) => (expr.clone(), false),
                 Fun(head, body) => {
                     let (new_head, halt) = eval_impl(head, strategy);
                     if halt {
@@ -125,7 +125,7 @@ impl Expr {
         eval_impl(self, strategy).0
     }
 
-    fn var_or_sym(name: &str) -> Result<Expr> {
+    fn var_or_sym(name: &str, constraint: Constraint) -> Result<Expr> {
         if name.is_empty() {
             bail!("Empty symbol name")
         }
@@ -133,7 +133,7 @@ impl Expr {
             .chars()
             .nth(0)
             .filter(|c| c.is_uppercase() || *c == '_')
-            .map(|_| Expr::Var(name.to_owned()))
+            .map(|_| Expr::Var(name.to_owned(), constraint))
             .unwrap_or(Expr::Sym(name.to_owned())))
     }
 
@@ -200,8 +200,9 @@ impl Expr {
                 Token {
                     kind: TokenKind::Ident,
                     text,
+                    constraint,
                     ..
-                } => Self::var_or_sym(&text)?,
+                } => Self::var_or_sym(&text, constraint)?,
                 Token {
                     kind: TokenKind::Number,
                     text,
@@ -280,10 +281,10 @@ impl Display for Expr {
                 }
                 write!(f, ")")
             }
-            Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name),
+            Expr::Sym(name) | Expr::Var(name, ..) => write!(f, "{}", name),
             Expr::Fun(head, body) => {
                 match &**head {
-                    Expr::Sym(name) | Expr::Var(name) => write!(f, "{}", name)?,
+                    Expr::Sym(name) | Expr::Var(name, ..) => write!(f, "{}", name)?,
                     other => write!(f, "({})", other)?,
                 }
                 write!(f, "(")?;

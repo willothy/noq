@@ -58,6 +58,17 @@ pub struct Token {
     pub kind: TokenKind,
     pub text: String,
     pub loc: Loc,
+    pub constraint: Constraint,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constraint {
+    Sym,
+    Num,
+    Str,
+    List,
+    Fun,
+    None,
 }
 
 impl Display for Token {
@@ -122,7 +133,21 @@ impl std::fmt::Display for Loc {
 
 impl Token {
     pub fn new(kind: TokenKind, text: String, loc: Loc) -> Self {
-        Self { kind, text, loc }
+        Self {
+            kind,
+            text,
+            loc,
+            constraint: Constraint::None,
+        }
+    }
+
+    pub fn ident(text: String, loc: Loc, constraint: Constraint) -> Self {
+        Self {
+            kind: TokenKind::Ident,
+            text,
+            loc,
+            constraint,
+        }
     }
 }
 
@@ -410,15 +435,6 @@ macro_rules! token_kinds {
                             let c = c.chars().nth(0).unwrap();
                             if !c.is_alphanumeric() && !c.is_whitespace() {
                                 match c {
-                                    '#' => {
-                                        while let Some(c) = self.chars.next_if(|x| *x != '\n') {
-                                            self.current_offset += 1;
-                                            self.current_col += 1;
-                                            text.push(c);
-                                        }
-                                        self.prev = Some(Token::new(Comment, text.clone(), loc.clone()));
-                                        return Token::new(Comment, text, loc);
-                                    }
                                     '"' => {
                                         text.pop();
                                         while let Some(c) = self.chars.next_if(|x| *x != '"') {
@@ -473,11 +489,7 @@ macro_rules! token_kinds {
                                     '_' => {}
                                     _ => {
                                         self.prev = Some(Token::new(Invalid, c.to_string(), loc.clone()));
-                                        return Token {
-                                            kind: Invalid,
-                                            text: c.to_string(),
-                                            loc
-                                        };
+                                        return Token::new(Invalid, c.to_string(), loc)
                                     }
                                 }
 
@@ -489,6 +501,44 @@ macro_rules! token_kinds {
                                     .next_if(|x| (x.is_alphanumeric() || *x == '.' || *x == '_' || *x == '\\') && !x.is_whitespace() && *x != '\n')
                                 {
                                     text.push(c);
+                                    self.current_col += 1;
+                                    self.current_offset += 1;
+                                }
+                                // ident# =  constrain to number
+                                // ident% =  constrain to string
+                                // ident$ =  constrain to symbol
+                                // ident[] = constrain to list
+                                // ident! =  constrain to function
+                                if let Some(c) = self.chars.next_if(|x| *x == '#' || *x == '$' || *x == '[' || *x == '!' || *x == '%') {
+                                    match c {
+                                        '#' => {
+                                            self.prev = Some(Token::ident(text.clone(), loc.clone(), Constraint::Num));
+                                            return Token::ident(text, loc, Constraint::Num)
+                                        }
+                                        '%' => {
+                                            self.prev = Some(Token::ident(text.clone(), loc.clone(), Constraint::Str));
+                                            return Token::ident(text, loc, Constraint::Str)
+                                        }
+                                        '$' => {
+                                            self.prev = Some(Token::ident(text.clone(), loc.clone(), Constraint::Sym));
+                                            return Token::ident(text, loc, Constraint::Sym)
+                                        }
+                                        '[' => {
+                                            if self.chars.next_if(|x| *x == ']').is_none() {
+                                                self.prev = Some(Token::new(Invalid, text.clone(), loc.clone()));
+                                                return Token::new(Invalid, text, loc);
+                                            }
+                                            self.current_col += 1;
+                                            self.current_offset += 1;
+                                            self.prev = Some(Token::ident(text.clone(), loc.clone(), Constraint::List));
+                                            return Token::ident(text, loc, Constraint::List)
+                                        }
+                                        '!' => {
+                                            self.prev = Some(Token::ident(text.clone(), loc.clone(), Constraint::Fun));
+                                            return Token::ident(text, loc, Constraint::Fun)
+                                        }
+                                        _ => {}
+                                    }
                                     self.current_col += 1;
                                     self.current_offset += 1;
                                 }
@@ -509,7 +559,7 @@ macro_rules! token_kinds {
                                 $($op_val => Token::new(Op(OpKind::$op_kind), text, loc),)+
                                 $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text, loc),)+
                                 $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text, loc),)?)+
-                                _ => Token::new(Ident, text, loc),
+                                _ => Token::ident(text, loc, Constraint::None),
                             };
                             self.prev = Some(token.clone());
                             token
@@ -518,11 +568,7 @@ macro_rules! token_kinds {
                 } else {
                     let loc = self.current_loc();
                     self.exhausted = true;
-                    Token {
-                        kind: TokenKind::Eof,
-                        text: String::new(),
-                        loc
-                    }
+                    Token::new(TokenKind::Eof, String::new(), loc)
                 }
             }
         }

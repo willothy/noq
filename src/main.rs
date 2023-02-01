@@ -158,7 +158,7 @@ fn write_subexpr_highlighted(
             }
             Ok(())
         }
-        Expr::Var(var) => {
+        Expr::Var(var, _) => {
             if highlight {
                 write!(writer, "{}", style.apply(var))?;
             } else {
