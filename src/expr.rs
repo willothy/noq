@@ -1,9 +1,12 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use anyhow::{bail, Result};
 use thiserror::Error;
 
-use crate::lexer::{Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE};
+use crate::{
+    lexer::{Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE},
+    rule::{pattern_match, Action, Bindings, State, Strategy},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
@@ -21,6 +24,107 @@ pub(crate) enum Expr {
 pub struct ParseError(String);
 
 impl Expr {
+    pub fn is_num(&self) -> bool {
+        matches!(self, Expr::Num(_))
+    }
+
+    pub fn is_const_expr(&self) -> bool {
+        use Expr::*;
+        match self {
+            Num(_) => true,
+            Op(_, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr(),
+            _ => false,
+        }
+    }
+
+    pub fn eval(&self, strategy: &mut impl Strategy) -> Expr {
+        fn eval_subexprs(expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
+            use Expr::*;
+            match expr {
+                Sym(_) | Var(_) | Num(_) | Str(_) => (expr.clone(), false),
+                Fun(head, body) => {
+                    let (new_head, halt) = eval_impl(head, strategy);
+                    if halt {
+                        return (Fun(box new_head, body.clone()), true);
+                    }
+                    let (new_body, halt) = eval_impl(body, strategy);
+                    (Fun(box new_head, box new_body), halt)
+                }
+                Op(op, lhs, rhs) => {
+                    let (new_lhs, halt) = eval_impl(lhs, strategy);
+                    if halt {
+                        return (Op(op.clone(), box new_lhs, rhs.clone()), true);
+                    }
+                    let (new_rhs, halt) = eval_impl(rhs, strategy);
+                    (Op(op.clone(), box new_lhs, box new_rhs), halt)
+                }
+                List(elements) => {
+                    let mut new_elements = vec![];
+                    let mut halt_elements = false;
+                    for element in elements {
+                        if halt_elements {
+                            new_elements.push(element.clone());
+                        } else {
+                            let (arg, arg_halt) = eval_impl(element, strategy);
+                            new_elements.push(arg);
+                            halt_elements = arg_halt;
+                        }
+                    }
+                    (List(new_elements), false)
+                }
+            }
+        }
+
+        fn apply_eval(expr: &Expr) -> Expr {
+            match expr {
+                Expr::Op(op, lhs, rhs) => {
+                    let lhs = match apply_eval(lhs.as_ref()) {
+                        Expr::Num(n) => n,
+                        _ => unreachable!(),
+                    };
+                    let rhs = match apply_eval(rhs.as_ref()) {
+                        Expr::Num(n) => n,
+                        _ => unreachable!(),
+                    };
+                    match op {
+                        OpKind::Add => Expr::Num(lhs + rhs),
+                        OpKind::Sub => Expr::Num(lhs - rhs),
+                        OpKind::Mul => Expr::Num(lhs * rhs),
+                        OpKind::Div => Expr::Num(lhs / rhs),
+                        OpKind::Pow => Expr::Num(lhs.pow(rhs as u32)),
+                    }
+                }
+                Expr::Num(_) => expr.clone(),
+                _ => unreachable!(),
+            }
+        }
+
+        fn eval_impl(expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
+            if expr.is_const_expr() {
+                let resolution = strategy.matched();
+                let new_expr = match resolution.action {
+                    Action::Apply => apply_eval(expr),
+                    Action::Skip => expr.clone(),
+                    Action::Check => {
+                        if let Some(matches) = strategy.matches() {
+                            matches.push((expr.clone(), apply_eval(expr)));
+                        }
+                        expr.clone()
+                    }
+                };
+                match resolution.state {
+                    State::Bail => (new_expr, false),
+                    State::Halt => (new_expr, true),
+                    State::Cont => eval_subexprs(&new_expr, strategy),
+                }
+            } else {
+                eval_subexprs(expr, strategy)
+            }
+        }
+
+        eval_impl(self, strategy).0
+    }
+
     fn var_or_sym(name: &str) -> Result<Expr> {
         if name.is_empty() {
             bail!("Empty symbol name")

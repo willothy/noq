@@ -7,10 +7,9 @@ use std::{
 };
 
 use crate::{
-    collect_subexprs,
+    collect_sub_constexprs, collect_subexprs,
     expr::Expr,
     lexer::{self, CommandKind, Lexer, Loc, StrategyKind, TokenKind},
-    repl::Highlight,
     rule::{ApplyAll, ApplyCheck, ApplyDeep, ApplyFirst, ApplyNth, Rule, Strategy},
     write_subexpr_highlighted,
 };
@@ -18,7 +17,6 @@ use anyhow::Result;
 use crossterm::{
     event::Event,
     style::{Color, ContentStyle, Stylize},
-    terminal::disable_raw_mode,
 };
 use linked_hash_map::LinkedHashMap;
 
@@ -249,6 +247,11 @@ impl StepResult {
             trigger: None,
         }
     }
+}
+
+enum StrategyResult {
+    Apply(Expr),
+    Check(ApplyCheck),
 }
 
 impl Runtime {
@@ -888,50 +891,89 @@ impl Runtime {
         // Apply rule
         lexer.catchup();
         if self.shape_stack.last().is_some() {
-            let reverse = lexer.next_if(|t| t.kind == TokenKind::Bang).is_some();
-
-            let (strategy, n) = match lexer.next() {
-                Some(lexer::Token {
-                    kind: TokenKind::Strategy(strategy),
-                    text,
-                    ..
-                }) => (strategy, text),
-                Some(invalid) => {
-                    return Err(InvalidStrategy(invalid.text).err(invalid.loc));
+            if &*name == "eval" {
+                if lexer.next_if(|t| t.kind == TokenKind::Bang).is_some() {
+                    return Err(UnexpectedToken.message(
+                        format!("cannot reverse an eval application"),
+                        lexer.current_loc(),
+                    ));
                 }
-                None => {
-                    return Err(UnexpectedEOF
-                        .message(format!("Expected strategy name"), lexer.current_loc()));
-                }
-            };
-
-            let rule = self
-                .rules
-                .get(&name)
-                .map(|rule| {
-                    if reverse {
-                        rule.reverse()
-                    } else {
-                        rule.clone()
+                let (strategy, n) = match lexer.next() {
+                    Some(lexer::Token {
+                        kind: TokenKind::Strategy(strategy),
+                        text,
+                        ..
+                    }) => (strategy, text),
+                    Some(invalid) => {
+                        return Err(InvalidStrategy(invalid.text).err(invalid.loc));
                     }
-                })
-                .ok_or(RuleDoesNotExist(name).err(lexer.current_loc()))?;
-
-            let res = self
-                .do_apply(&rule, strategy, n)
-                .runtime_error(ApplyError, lexer.current_loc())?;
-            if let Some(res) = res {
-                Ok(StepResult::new(
-                    if self.verbosity == Verbosity::Silent {
-                        vec![]
-                    } else {
-                        vec![res.0]
-                    },
-                    res.1,
-                    res.2,
-                ))
+                    None => {
+                        return Err(UnexpectedEOF
+                            .message(format!("Expected strategy name"), lexer.current_loc()));
+                    }
+                };
+                let res = self
+                    .do_eval(strategy, n)
+                    .runtime_error(ApplyError, lexer.current_loc())?;
+                if let Some(res) = res {
+                    Ok(StepResult::new(
+                        if self.verbosity == Verbosity::Silent {
+                            vec![]
+                        } else {
+                            vec![res.0]
+                        },
+                        res.1,
+                        res.2,
+                    ))
+                } else {
+                    Ok(StepResult::empty())
+                }
             } else {
-                Ok(StepResult::empty())
+                let reverse = lexer.next_if(|t| t.kind == TokenKind::Bang).is_some();
+
+                let (strategy, n) = match lexer.next() {
+                    Some(lexer::Token {
+                        kind: TokenKind::Strategy(strategy),
+                        text,
+                        ..
+                    }) => (strategy, text),
+                    Some(invalid) => {
+                        return Err(InvalidStrategy(invalid.text).err(invalid.loc));
+                    }
+                    None => {
+                        return Err(UnexpectedEOF
+                            .message(format!("Expected strategy name"), lexer.current_loc()));
+                    }
+                };
+
+                let rule = self
+                    .rules
+                    .get(&name)
+                    .map(|rule| {
+                        if reverse {
+                            rule.reverse()
+                        } else {
+                            rule.clone()
+                        }
+                    })
+                    .ok_or(RuleDoesNotExist(name).err(lexer.current_loc()))?;
+
+                let res = self
+                    .do_apply(&rule, strategy, n)
+                    .runtime_error(ApplyError, lexer.current_loc())?;
+                if let Some(res) = res {
+                    Ok(StepResult::new(
+                        if self.verbosity == Verbosity::Silent {
+                            vec![]
+                        } else {
+                            vec![res.0]
+                        },
+                        res.1,
+                        res.2,
+                    ))
+                } else {
+                    Ok(StepResult::empty())
+                }
             }
         } else {
             return Err(NoShape.err(lexer.current_loc()));
@@ -1128,13 +1170,23 @@ impl Runtime {
             DoubleDot => self.cmd_all_rules(lexer),
             DoubleColon => self.cmd_anon_rule(lexer),
             Ident => {
-                let name = tok.text.clone();
-                let next = lexer.peek_next().clone();
+                let next = lexer.peek_next();
 
                 match next.kind {
-                    DoubleColon => self.cmd_def_rule(lexer, name),
-                    Bar => self.cmd_apply_named_rule(lexer, name),
+                    DoubleColon => self.cmd_def_rule(lexer, tok.text),
+                    Bar => self.cmd_apply_named_rule(lexer, tok.text),
                     _ => self.cmd_def_shape(lexer),
+                }
+            }
+            Eval => {
+                let next = lexer.peek_next();
+
+                match next.kind {
+                    Bar => self.cmd_apply_named_rule(lexer, tok.text),
+                    _ => {
+                        Err(InvalidCommand(tok.text)
+                            .message("expected '|' after eval".into(), tok.loc))
+                    }
                 }
             }
             TokenKind::Comment => {
@@ -1156,16 +1208,105 @@ impl Runtime {
         }
     }
 
+    fn do_eval(
+        &mut self,
+        strategy: StrategyKind,
+        n: String,
+    ) -> Result<Option<(Vec<String>, bool, bool)>> {
+        use StrategyResult::*;
+        let apply = match strategy {
+            StrategyKind::ApplyAll => {
+                Apply(self.shape_stack.last_mut().unwrap().eval(&mut ApplyAll))
+            }
+            StrategyKind::ApplyFirst => {
+                Apply(self.shape_stack.last_mut().unwrap().eval(&mut ApplyFirst))
+            }
+            StrategyKind::ApplyDeep => {
+                Apply(self.shape_stack.last_mut().unwrap().eval(&mut ApplyDeep))
+            }
+            StrategyKind::ApplyNth => Apply(
+                self.shape_stack
+                    .last_mut()
+                    .unwrap()
+                    .eval(&mut ApplyNth::new(n.parse()?)),
+            ),
+            StrategyKind::Check => {
+                let mut check = ApplyCheck::new();
+                self.shape_stack.last().unwrap().eval(&mut check);
+                Check(check)
+            }
+            #[allow(unreachable_patterns)]
+            _ => return Err(InvalidStrategy(n).into()),
+        };
+        let mut res = vec![];
+        let mut indent_each = false;
+        if let Apply(apply) = apply {
+            self.apply_history.push(std::mem::replace(
+                self.shape_stack.last_mut().unwrap(),
+                apply,
+            ));
+            res.push(format!("{}", self.shape_stack.last().unwrap()));
+        } else if let Check(mut check) = apply {
+            let matches = check.matches().unwrap();
+            let mut matches_str = vec![];
+            for (match_idx, (from, to)) in matches.iter().enumerate() {
+                let from_subexprs = collect_sub_constexprs(&self.shape_stack.last().unwrap());
+                let Some(from_idx) = from_subexprs
+                    .iter()
+                    .enumerate()
+                    .find(|(_, expr)| **expr == from) else {
+                    continue;
+                };
+                let mut from_str = String::new();
+                write_subexpr_highlighted(
+                    self.shape_stack.last().unwrap(),
+                    &from_subexprs,
+                    from_idx.0,
+                    ContentStyle::default().with(Color::Red),
+                    false,
+                    &mut from_str,
+                )?;
+
+                let applied = self
+                    .shape_stack
+                    .last()
+                    .unwrap()
+                    .eval(&mut ApplyNth::new(match_idx));
+
+                let to_subexprs = collect_subexprs(to, &applied);
+                let Some(to_idx) = to_subexprs
+                .iter()
+                .enumerate()
+                .find(|(_, expr)| **expr == to) else {
+                    continue;
+                };
+                let mut to_str = String::new();
+
+                write_subexpr_highlighted(
+                    &applied,
+                    &to_subexprs,
+                    to_idx.0,
+                    ContentStyle::default().with(Color::Green),
+                    false,
+                    &mut to_str,
+                )?;
+
+                matches_str.push(format!("{} -> {}", from_str, to_str));
+            }
+            res.extend(matches_str);
+
+            indent_each = true;
+        }
+
+        Ok(Some((res, indent_each, false)))
+    }
+
     fn do_apply(
         &mut self,
         rule: &Rule,
         strategy: StrategyKind,
         n: String,
     ) -> Result<Option<(Vec<String>, bool, bool)>> {
-        enum StrategyResult {
-            Apply(Expr),
-            Check(ApplyCheck),
-        }
         use StrategyResult::*;
         let apply = match strategy {
             StrategyKind::ApplyAll => {

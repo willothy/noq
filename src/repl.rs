@@ -15,7 +15,7 @@ use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    lexer::{self, Lexer, STRATEGIES},
+    lexer::{self, Lexer, StrategyKind, STRATEGIES},
     runtime::{InteractionResult, Runtime, RuntimeError, StepResult, Verbosity},
 };
 
@@ -89,6 +89,7 @@ impl Highlight for String {
                         lexer::TokenKind::Rules
                         | lexer::TokenKind::Commands
                         | lexer::TokenKind::Reverse
+                        | lexer::TokenKind::Eval
                         | lexer::TokenKind::Bang => {
                             highlights.insert(tok.loc.offset, (Keyword, tok.text));
                         }
@@ -148,45 +149,6 @@ impl Highlight for String {
             }
         }
         res.stylize()
-    }
-}
-
-#[allow(unused)]
-pub fn most_likely_command(input: &str) -> Option<String> {
-    let mut lexer = Lexer::new(input.chars().peekable());
-    let cmd = match lexer.next() {
-        Some(tok) => match tok.kind {
-            lexer::TokenKind::Command(cmd) => cmd,
-            lexer::TokenKind::Invalid => None?,
-            _ => None?,
-        },
-        None => None?,
-    };
-    use lexer::CommandKind::*;
-    match cmd {
-        Done | Undo | Redo | Help | Quit | Use | Run | Clear => None?,
-        Save => {
-            let _save_level = match lexer.next() {
-                Some(tok) => {
-                    if tok.kind != lexer::TokenKind::Rules && "rules".starts_with(&tok.text) {
-                        return Some("rules".to_string());
-                    }
-                    if tok.kind != lexer::TokenKind::Rules && "commands".starts_with(&tok.text) {
-                        return Some("commands".to_string());
-                    }
-                    if tok.kind != lexer::TokenKind::Rules && "all".starts_with(&tok.text) {
-                        return Some("all".to_string());
-                    }
-                }
-                None => {
-                    return Some(STRATEGIES[0].to_string());
-                }
-            };
-            None?
-        }
-        Cd => None?,
-        Ls => None?,
-        Pwd => None?,
     }
 }
 

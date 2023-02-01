@@ -56,6 +56,37 @@ fn collect_subexprs<'a>(pattern: &'a Expr, expr: &'a Expr) -> Vec<&'a Expr> {
     subexprs
 }
 
+fn collect_sub_constexprs<'a>(expr: &'a Expr) -> Vec<&'a Expr> {
+    let mut subexprs = vec![];
+
+    fn inner<'a>(expr: &'a Expr, subexprs: &mut Vec<&'a Expr>) {
+        if expr.is_const_expr() && !expr.is_num() {
+            subexprs.push(expr);
+        }
+
+        match expr {
+            Expr::Fun(head, body) => {
+                inner(head, subexprs);
+                inner(body, subexprs);
+            }
+            Expr::List(elements) => {
+                for element in elements {
+                    inner(element, subexprs);
+                }
+            }
+            Expr::Op(_, lhs, rhs) => {
+                inner(lhs, subexprs);
+                inner(rhs, subexprs);
+            }
+            _ => {}
+        }
+    }
+
+    inner(expr, &mut subexprs);
+
+    subexprs
+}
+
 fn write_subexpr_highlighted(
     expr: &Expr,
     subexprs: &Vec<&Expr>,
@@ -106,7 +137,7 @@ fn write_subexpr_highlighted(
             if highlight {
                 write!(writer, "{}", style.apply("("))?;
                 write_subexpr_highlighted(lhs, subexprs, idx, style, highlight, writer)?;
-                write!(writer, "{} {}", style.apply(" "), style.apply(op))?;
+                write!(writer, " {} ", style.apply(op))?;
                 write_subexpr_highlighted(rhs, subexprs, idx, style, highlight, writer)?;
                 write!(writer, "{}", style.apply(")"))?;
                 Ok(())
@@ -166,48 +197,6 @@ fn main() -> anyhow::Result<()> {
             println!("Panicked with no message at {}", location);
         }
     }));
-
-    /*  let pattern = Expr::try_from("b((f)(_))").unwrap();
-    let pattern2 = Expr::try_from("(_, _)").unwrap();
-
-    let expr = Expr::try_from("f(g(a), b(f(c, 99)), c, b(f(10, 12)), aef, awf)").unwrap();
-    let subexprs = collect_subexprs(&pattern, &expr);
-    let subexprs2 = collect_subexprs(&pattern2, &expr);
-    let mut s = String::new();
-
-    let mut line = String::new();
-    s += &format!("Pattern 1: {}\n", pattern);
-    for idx in 0..subexprs.len() {
-        write_subexpr_highlighted(
-            &expr,
-            &subexprs,
-            idx,
-            ContentStyle::new().with(crossterm::style::Color::Green),
-            false,
-            &mut line,
-        )
-        .unwrap_or_else(|e| println!("Error writing to string: {}", e));
-        s.extend(line.drain(..));
-        s += "\n";
-    }
-    println!("{}", s);
-    s.clear();
-    s += "\n\n";
-    s += &format!("Pattern 2: {}\n", pattern2);
-    for idx in 0..subexprs2.len() {
-        write_subexpr_highlighted(
-            &expr,
-            &subexprs2,
-            idx,
-            ContentStyle::new().with(crossterm::style::Color::Green),
-            false,
-            &mut line,
-        )
-        .unwrap_or_else(|e| println!("Error writing to string: {}", e));
-        s.extend(line.drain(..));
-        s += "\n";
-    }
-    println!("{}", s); */
 
     if let Some(file) = args().nth(1) {
         let path = PathBuf::from(file);

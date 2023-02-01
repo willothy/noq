@@ -66,11 +66,11 @@ impl Rule {
                 List(elements) => {
                     let mut new_elements = vec![];
                     let mut halt_elements = false;
-                    for arg in elements {
+                    for element in elements {
                         if halt_elements {
-                            new_elements.push(arg.clone());
+                            new_elements.push(element.clone());
                         } else {
-                            let (arg, arg_halt) = apply_impl(rule, arg, strategy);
+                            let (arg, arg_halt) = apply_impl(rule, element, strategy);
                             new_elements.push(arg);
                             halt_elements = arg_halt;
                         }
@@ -209,8 +209,8 @@ pub enum State {
 }
 
 pub struct Resolution {
-    action: Action,
-    state: State,
+    pub action: Action,
+    pub state: State,
 }
 
 pub(crate) trait Strategy {

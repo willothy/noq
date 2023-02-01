@@ -12,6 +12,7 @@ crate::token_kinds! {
     Rules = "rules",
     Commands = "commands",
     Reverse = "reverse",
+    Eval = "eval",
     Colon,
     DoubleColon = "::",
     OpenParen = "(",
@@ -274,10 +275,11 @@ macro_rules! token_kinds {
         ];
 
         #[allow(dead_code)]
-        pub const KEYWORDS: [&str; 3] = [
+        pub const KEYWORDS: [&str; 4] = [
             "rules",
             "commands",
-            "reverse"
+            "reverse",
+            "eval"
         ];
 
         impl<T: Iterator<Item = char>> Iterator for Lexer<T> {
