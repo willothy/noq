@@ -4,6 +4,7 @@
 
 use std::{env::args, fmt, path::PathBuf};
 
+use anyhow::anyhow;
 use crossterm::{
     execute,
     style::{Attribute, ContentStyle, Stylize},
@@ -62,8 +63,11 @@ fn write_subexpr_highlighted(
     style: ContentStyle,
     parent_highlight: bool,
     writer: &mut dyn std::fmt::Write,
-) -> fmt::Result {
-    let highlight = pattern_match(expr, subexprs[idx]).is_some() || parent_highlight;
+) -> anyhow::Result<()> {
+    let subexpr = subexprs
+        .get(idx)
+        .ok_or(anyhow!("Subexpr {} does not exist", idx))?;
+    let highlight = pattern_match(expr, subexpr).is_some() || parent_highlight;
     match expr {
         Expr::List(elements) => {
             if highlight {
@@ -74,7 +78,8 @@ fn write_subexpr_highlighted(
                         write!(writer, "{}", style.apply(", "))?;
                     }
                 }
-                write!(writer, "{}", style.apply(")"))
+                write!(writer, "{}", style.apply(")"))?;
+                Ok(())
             } else {
                 write!(writer, "{}", "(")?;
                 for (i, element) in elements.iter().enumerate() {
@@ -83,7 +88,8 @@ fn write_subexpr_highlighted(
                         write!(writer, "{}", ", ")?;
                     }
                 }
-                write!(writer, "{}", ")")
+                write!(writer, "{}", ")")?;
+                Ok(())
             }
         }
         Expr::Fun(head, body) => {
@@ -100,44 +106,50 @@ fn write_subexpr_highlighted(
             if highlight {
                 write!(writer, "{}", style.apply("("))?;
                 write_subexpr_highlighted(lhs, subexprs, idx, style, highlight, writer)?;
-                write!(writer, "{} {} ", style.apply(" "), style.apply(op))?;
+                write!(writer, "{} {}", style.apply(" "), style.apply(op))?;
                 write_subexpr_highlighted(rhs, subexprs, idx, style, highlight, writer)?;
-                write!(writer, "{}", style.apply(")"))
+                write!(writer, "{}", style.apply(")"))?;
+                Ok(())
             } else {
                 write!(writer, "(")?;
                 write_subexpr_highlighted(lhs, subexprs, idx, style, highlight, writer)?;
                 write!(writer, " {} ", op)?;
                 write_subexpr_highlighted(rhs, subexprs, idx, style, highlight, writer)?;
-                write!(writer, ")")
+                write!(writer, ")")?;
+                Ok(())
             }
         }
         Expr::Sym(sym) => {
             if highlight {
-                write!(writer, "{}", style.apply(sym))
+                write!(writer, "{}", style.apply(sym))?;
             } else {
-                write!(writer, "{}", sym)
+                write!(writer, "{}", sym)?;
             }
+            Ok(())
         }
         Expr::Var(var) => {
             if highlight {
-                write!(writer, "{}", style.apply(var))
+                write!(writer, "{}", style.apply(var))?;
             } else {
-                write!(writer, "{}", var)
+                write!(writer, "{}", var)?;
             }
+            Ok(())
         }
         Expr::Num(num) => {
             if highlight {
-                write!(writer, "{}", style.apply(num))
+                write!(writer, "{}", style.apply(num))?;
             } else {
-                write!(writer, "{}", num)
+                write!(writer, "{}", num)?;
             }
+            Ok(())
         }
         Expr::Str(str) => {
             if highlight {
-                write!(writer, "\"{}\"", style.apply(str))
+                write!(writer, "\"{}\"", style.apply(str))?;
             } else {
-                write!(writer, "\"{}\"", str)
+                write!(writer, "\"{}\"", str)?;
             }
+            Ok(())
         }
     }
 }
@@ -155,32 +167,47 @@ fn main() -> anyhow::Result<()> {
         }
     }));
 
-    let pattern = Expr::try_from("_(_)").unwrap();
-    let pattern2 = Expr::try_from("_").unwrap();
-    let expr = Expr::try_from("f(g(a), b, c)").unwrap();
+    /*  let pattern = Expr::try_from("b((f)(_))").unwrap();
+    let pattern2 = Expr::try_from("(_, _)").unwrap();
+
+    let expr = Expr::try_from("f(g(a), b(f(c, 99)), c, b(f(10, 12)), aef, awf)").unwrap();
     let subexprs = collect_subexprs(&pattern, &expr);
     let subexprs2 = collect_subexprs(&pattern2, &expr);
     let mut s = String::new();
-    write_subexpr_highlighted(
-        &expr,
-        &subexprs,
-        0,
-        ContentStyle::new().with(crossterm::style::Color::Green),
-        false,
-        &mut s,
-    )
-    .unwrap();
-    s += "\n";
-    write_subexpr_highlighted(
-        &expr,
-        &subexprs2,
-        0,
-        ContentStyle::new().with(crossterm::style::Color::Green),
-        false,
-        &mut s,
-    )
-    .unwrap();
+
+    let mut line = String::new();
+    s += &format!("Pattern 1: {}\n", pattern);
+    for idx in 0..subexprs.len() {
+        write_subexpr_highlighted(
+            &expr,
+            &subexprs,
+            idx,
+            ContentStyle::new().with(crossterm::style::Color::Green),
+            false,
+            &mut line,
+        )
+        .unwrap_or_else(|e| println!("Error writing to string: {}", e));
+        s.extend(line.drain(..));
+        s += "\n";
+    }
     println!("{}", s);
+    s.clear();
+    s += "\n\n";
+    s += &format!("Pattern 2: {}\n", pattern2);
+    for idx in 0..subexprs2.len() {
+        write_subexpr_highlighted(
+            &expr,
+            &subexprs2,
+            idx,
+            ContentStyle::new().with(crossterm::style::Color::Green),
+            false,
+            &mut line,
+        )
+        .unwrap_or_else(|e| println!("Error writing to string: {}", e));
+        s.extend(line.drain(..));
+        s += "\n";
+    }
+    println!("{}", s); */
 
     if let Some(file) = args().nth(1) {
         let path = PathBuf::from(file);

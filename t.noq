@@ -1,0 +1,6 @@
+use std.noq
+
+square :: X^2 = X*X
+pair :: (A, B) = A*B
+
+f(g(x)*g(x))

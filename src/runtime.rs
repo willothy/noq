@@ -7,13 +7,19 @@ use std::{
 };
 
 use crate::{
+    collect_subexprs,
     expr::Expr,
     lexer::{self, CommandKind, Lexer, Loc, StrategyKind, TokenKind},
     repl::Highlight,
     rule::{ApplyAll, ApplyCheck, ApplyDeep, ApplyFirst, ApplyNth, Rule, Strategy},
+    write_subexpr_highlighted,
 };
 use anyhow::Result;
-use crossterm::{event::Event, style::Stylize};
+use crossterm::{
+    event::Event,
+    style::{Color, ContentStyle, Stylize},
+    terminal::disable_raw_mode,
+};
 use linked_hash_map::LinkedHashMap;
 
 pub struct Runtime {
@@ -748,7 +754,7 @@ impl Runtime {
         }
     }
 
-    fn cmd_for_all_rules(
+    fn cmd_all_rules(
         &mut self,
         lexer: &mut Lexer<impl Iterator<Item = char>>,
     ) -> Result<StepResult, RuntimeError> {
@@ -800,7 +806,7 @@ impl Runtime {
                                 .0
                                 .iter()
                                 .enumerate()
-                                .map(|(idx, s)| format!("{}> {}", idx, s)),
+                                .map(|(idx, s)| format!("{:<2}> {}", idx, s)),
                         );
                         r.push(new);
                     }
@@ -1119,7 +1125,7 @@ impl Runtime {
             Command(CommandKind::Pwd) => self.cmd_pwd(lexer),
             Command(CommandKind::Cd) => self.cmd_cd(lexer),
             CloseBrace | Command(CommandKind::Done) => self.cmd_done(lexer),
-            DoubleDot => self.cmd_for_all_rules(lexer),
+            DoubleDot => self.cmd_all_rules(lexer),
             DoubleColon => self.cmd_anon_rule(lexer),
             Ident => {
                 let name = tok.text.clone();
@@ -1192,13 +1198,52 @@ impl Runtime {
             ));
             res.push(format!("{}", self.shape_stack.last().unwrap()));
         } else if let Check(mut check) = apply {
-            res.extend(check.matches().unwrap().drain(..).map(|(from, to)| {
-                format!(
-                    "{} -> {}",
-                    from.to_string().highlight(),
-                    to.to_string().highlight()
-                )
-            }));
+            let matches = check.matches().unwrap();
+            let mut matches_str = vec![];
+            for (match_idx, (from, to)) in matches.iter().enumerate() {
+                let from_subexprs = collect_subexprs(&rule.head, &self.shape_stack.last().unwrap());
+                let Some(from_idx) = from_subexprs
+                    .iter()
+                    .enumerate()
+                    .find(|(_, expr)| **expr == from) else {
+                    continue;
+                };
+                let mut from_str = String::new();
+                write_subexpr_highlighted(
+                    self.shape_stack.last().unwrap(),
+                    &from_subexprs,
+                    from_idx.0,
+                    ContentStyle::default().with(Color::Red),
+                    false,
+                    &mut from_str,
+                )?;
+
+                let applied = rule.apply(
+                    &self.shape_stack.last().unwrap(),
+                    &mut ApplyNth::new(match_idx),
+                );
+                let to_subexprs = collect_subexprs(to, &applied);
+                let Some(to_idx) = to_subexprs
+                .iter()
+                .enumerate()
+                .find(|(_, expr)| **expr == to) else {
+                    continue;
+                };
+                let mut to_str = String::new();
+
+                write_subexpr_highlighted(
+                    &applied,
+                    &to_subexprs,
+                    to_idx.0,
+                    ContentStyle::default().with(Color::Green),
+                    false,
+                    &mut to_str,
+                )?;
+
+                matches_str.push(format!("{} -> {}", from_str, to_str));
+            }
+            res.extend(matches_str);
+
             indent_each = true;
         }
 

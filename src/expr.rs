@@ -68,14 +68,6 @@ impl Expr {
                     ..
                 } => {
                     let result = Self::parse(lexer)?;
-                    /* if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                        return Err(ParseError(format!(
-                            "Expected ')', got {}",
-                            lexer.next().unwrap_string()
-                        ))
-                        .into());
-                    }
-                    result */
                     if lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
                         let mut result = vec![result, Self::parse(lexer)?];
                         while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {

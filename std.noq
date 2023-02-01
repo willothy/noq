@@ -23,5 +23,3 @@ double_sum :: A + A = 2*A
 square_of_sum :: (a + b)^2 = a^2 + (2*(a*b) + b^2)
 cube_of_sum :: (A + B)^3 = A*(A + B)^2 + B*(A + B)^2
 
-test :: test(X) = X
-test("bruh")

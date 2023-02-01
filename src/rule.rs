@@ -168,7 +168,9 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                 match_impl(pat_name, val_name, bindings) && match_impl(pat_body, val_body, bindings)
             }
             (List(pat_elements), List(val_elements)) => {
-                if pat_elements.len() != val_elements.len() {
+                if pat_elements.len() == 1 && &pat_elements[0] == &Expr::Var("_".to_string()) {
+                    true
+                } else if pat_elements.len() != val_elements.len() {
                     false
                 } else {
                     pat_elements
