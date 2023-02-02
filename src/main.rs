@@ -1,6 +1,6 @@
 #![feature(box_syntax)]
 #![feature(panic_info_message)]
-#![feature(try_trait_v2)]
+#![feature(let_chains)]
 
 use std::{env::args, path::PathBuf};
 
@@ -28,9 +28,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(location) = info.location() {
             if let Some(payload) = info.message() {
                 println!("Panicked with \"{}\" at {}", payload, location);
-                return;
+            } else {
+                println!("Panicked with no message at {}", location);
             }
-            println!("Panicked with no message at {}", location);
+            #[cfg(debug_assertions)]
+            println!(
+                "Backtrace: {:#?}",
+                std::backtrace::Backtrace::force_capture()
+            );
         }
     }));
 

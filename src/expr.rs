@@ -17,7 +17,13 @@ pub(crate) enum Expr {
     Str(String),
     Fun(Box<Expr>, Box<Expr>),
     Op(OpKind, Box<Expr>, Box<Expr>),
-    List(Vec<Expr>),
+    List(Vec<Expr>, Repeat),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Repeat {
+    None,
+    ZeroOrMore,
 }
 
 #[derive(Debug, Error)]
@@ -59,7 +65,7 @@ impl Expr {
                     let (new_rhs, halt) = eval_impl(rhs, strategy);
                     (Op(op.clone(), box new_lhs, box new_rhs), halt)
                 }
-                List(elements) => {
+                List(elements, repeat) => {
                     let mut new_elements = vec![];
                     let mut halt_elements = false;
                     for element in elements {
@@ -71,7 +77,7 @@ impl Expr {
                             halt_elements = arg_halt;
                         }
                     }
-                    (List(new_elements), false)
+                    (List(new_elements, *repeat), false)
                 }
             }
         }
@@ -134,25 +140,36 @@ impl Expr {
             .unwrap_or(Expr::Sym(name.to_owned()))
     }
 
-    fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Self>> {
+    fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<(Vec<Self>, Repeat)> {
         use TokenKind::*;
         if lexer.next_if(|tok| tok.kind == OpenParen).is_none() {
             return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
                 .with_message("Expected '('");
         }
-        let mut args = Vec::new();
+
+        let mut elements = Vec::new();
+        let mut repeat = Repeat::None;
+
         if lexer.next_if(|tok| tok.kind == CloseParen).is_some() {
-            return Ok(args);
+            return Ok((elements, repeat));
         }
-        args.push(Self::parse(lexer)?);
+
+        elements.push(Self::parse(lexer)?);
         while lexer.next_if(|tok| tok.kind == Comma).is_some() {
-            args.push(Self::parse(lexer)?);
+            if lexer.next_if(|tok| tok.kind == DoubleDot).is_some() {
+                repeat = Repeat::ZeroOrMore;
+                break;
+            } else {
+                elements.push(Self::parse(lexer)?);
+            }
         }
+
         if lexer.next_if(|tok| tok.kind == CloseParen).is_none() {
             let t = lexer.next_token();
             return err!(Parse UnexpectedToken(t.text), t.loc).with_message("Expected ')'");
         }
-        Ok(args)
+
+        Ok((elements, repeat))
     }
 
     fn parse_fn_or_var_or_sym(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
@@ -164,16 +181,26 @@ impl Expr {
                 } => {
                     let result = Self::parse(lexer)?;
                     if lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
-                        let mut result = vec![result, Self::parse(lexer)?];
-                        while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+                        let mut result = vec![result];
+                        let mut repeat = Repeat::None;
+                        if lexer.next_if(|t| t.kind == TokenKind::DoubleDot).is_some() {
+                            repeat = Repeat::ZeroOrMore;
+                        } else {
                             result.push(Self::parse(lexer)?);
-                            println!("peek: {:?}", lexer.peek());
+                            while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+                                if lexer.next_if(|t| t.kind == TokenKind::DoubleDot).is_some() {
+                                    repeat = Repeat::ZeroOrMore;
+                                    break;
+                                } else {
+                                    result.push(Self::parse(lexer)?);
+                                }
+                            }
                         }
                         if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
                             return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
                                 .with_message("Expected ')'");
                         }
-                        Expr::List(result)
+                        Expr::List(result, repeat)
                     } else {
                         if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
                             return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
@@ -211,7 +238,8 @@ impl Expr {
             ..
         } = lexer.peek()
         {
-            head = Expr::Fun(box head, box Expr::List(Self::parse_list(lexer)?));
+            let (body, repeat) = Self::parse_list(lexer)?;
+            head = Expr::Fun(box head, box Expr::List(body, repeat));
         }
         Ok(head)
     }
@@ -254,13 +282,16 @@ impl TryFrom<&str> for Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Expr::List(exprs) => {
+            Expr::List(exprs, repeat) => {
                 write!(f, "(")?;
                 for (i, expr) in exprs.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}", expr)?;
+                }
+                if repeat == &Repeat::ZeroOrMore {
+                    write!(f, ", ..")?;
                 }
                 write!(f, ")")
             }
@@ -272,12 +303,15 @@ impl Display for Expr {
                 }
                 write!(f, "(")?;
                 match &**body {
-                    Expr::List(exprs) => {
+                    Expr::List(exprs, repeat) => {
                         for (i, expr) in exprs.iter().enumerate() {
                             if i > 0 {
                                 write!(f, ", ")?;
                             }
                             write!(f, "{}", expr)?;
+                        }
+                        if repeat == &Repeat::ZeroOrMore {
+                            write!(f, ", ..")?;
                         }
                     }
                     other => write!(f, "{}", other)?,

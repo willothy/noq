@@ -30,11 +30,11 @@ fn matching() {
 
     if let Some(bindings) = pattern_match(&pattern, &value) {
         eprintln!("MATCH:");
-        for (name, value) in bindings.iter() {
+        for (name, value) in bindings.into_iter() {
             let exp_value = expected.get(name.as_str()).unwrap();
             eprintln!("Expected: {} = {}", name, exp_value);
-            eprintln!("Found:    {} = {}", name, value);
-            assert!(value == exp_value);
+            eprintln!("Found:    {} = {:?}", name, value);
+            assert!(*value.assert_var() == *exp_value);
         }
     } else {
         eprintln!("{}", pattern);

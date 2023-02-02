@@ -8,7 +8,7 @@ use std::{
 use crate::{
     err, err_hl,
     error::{Error, ErrorKind, IntoError, Result, RuntimeError::*, WithMessage},
-    expr::Expr,
+    expr::{Expr, Repeat},
     lexer::{self, CommandKind, Lexer, Loc, StrategyKind, Token, TokenKind},
     matching::{collect_sub_constexprs, collect_subexprs, pattern_match},
     parse::{self, parse_eval, RuleDefResult, SaveType},
@@ -45,6 +45,7 @@ pub(crate) enum InteractionResult {
     Int(isize),
     UInt(usize),
     Float(f64),
+    Bool(bool),
     Option(Option<Box<InteractionResult>>),
     Err(Box<dyn std::error::Error>),
 }
@@ -194,7 +195,7 @@ impl Runtime {
         )?;
         let highlight = pattern_match(expr, subexpr).is_some() || parent_highlight;
         match expr {
-            Expr::List(elements) => {
+            Expr::List(elements, repeat) => {
                 if highlight {
                     write!(writer, "{}", style.apply("(")).inherit(loc.clone())?;
                     for (i, element) in elements.iter().enumerate() {
@@ -210,6 +211,9 @@ impl Runtime {
                         if i + 1 < elements.len() {
                             write!(writer, "{}", style.apply(", ")).inherit(loc.clone())?;
                         }
+                    }
+                    if *repeat == Repeat::ZeroOrMore {
+                        write!(writer, "{}", style.apply(", .. ")).inherit(loc.clone())?;
                     }
                     write!(writer, "{}", style.apply(")")).inherit(loc.clone())?;
                     Ok(())
@@ -228,6 +232,9 @@ impl Runtime {
                         if i + 1 < elements.len() {
                             write!(writer, "{}", ", ").inherit(loc.clone())?;
                         }
+                    }
+                    if *repeat == Repeat::ZeroOrMore {
+                        write!(writer, "{}", ", .. ").inherit(loc.clone())?;
                     }
                     write!(writer, "{}", ")").inherit(loc.clone())?;
                     Ok(())

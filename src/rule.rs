@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use crate::{
     err,
@@ -8,8 +8,6 @@ use crate::{
     lexer::{Lexer, TokenKind},
     matching::{pattern_match, substitute_bindings},
 };
-
-pub(crate) type Bindings = HashMap<String, Expr>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
@@ -63,7 +61,7 @@ impl Rule {
                     let new_body = apply_impl(rule, body, strategy).0;
                     (Fun(box new_head, box new_body), false)
                 }
-                List(elements) => {
+                List(elements, repeat) => {
                     let mut new_elements = vec![];
                     let mut halt_elements = false;
                     for element in elements {
@@ -75,21 +73,23 @@ impl Rule {
                             halt_elements = arg_halt;
                         }
                     }
-                    (List(new_elements), false)
+                    (List(new_elements, *repeat), false)
                 }
             }
         }
 
         fn apply_impl(rule: &Rule, expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
-            if let Some(bindings) = pattern_match(&rule.head, expr) {
+            if let Some(mut bindings) = pattern_match(&rule.head, expr) {
                 let resolution = strategy.matched();
                 let new_expr = match resolution.action {
-                    Action::Apply => substitute_bindings(&bindings, &rule.body),
+                    Action::Apply => substitute_bindings(&mut bindings, &rule.body, false),
                     Action::Skip => expr.clone(),
                     Action::Check => {
                         if let Some(matches) = strategy.matches() {
-                            matches
-                                .push((expr.clone(), substitute_bindings(&bindings, &rule.body)));
+                            matches.push((
+                                expr.clone(),
+                                substitute_bindings(&mut bindings, &rule.body, false),
+                            ));
                         }
                         expr.clone()
                     }
