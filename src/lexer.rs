@@ -9,10 +9,6 @@ crate::token_kinds! {
     UnclosedStr,
     Path,
     Number,
-    Rules = "rules",
-    Commands = "commands",
-    Reverse = "reverse",
-    Eval = "eval",
     Colon,
     DoubleColon = "::",
     OpenParen = "(",
@@ -26,6 +22,12 @@ crate::token_kinds! {
     CloseBrace = "}",
     Bar = "|",
     Bang = "!",
+    -keywords-
+    Rules = "rules",
+    Commands = "commands",
+    Reverse = "reverse",
+    Eval = "eval",
+    TypeOf = "typeof",
     -binops 2-
     Add = "+" 0,
     Sub = "-" 0,
@@ -217,6 +219,8 @@ macro_rules! strategies {
 macro_rules! token_kinds {
     (
         $($kind:ident$(= $val:literal)?),+$(,)?
+        -keywords-
+        $($keyword:ident = $keyword_val:literal),+$(,)?
         -binops $max_prec:literal-
         $($op_kind:ident = $op_val:literal $op_prec:literal),+$(,)?
         -commands-
@@ -227,6 +231,7 @@ macro_rules! token_kinds {
         #[derive(Debug, PartialEq, Clone)]
         pub(crate) enum TokenKind {
             $($kind),+,
+            $($keyword),+,
             Op(OpKind),
             Command(CommandKind),
             Strategy(StrategyKind)
@@ -300,11 +305,8 @@ macro_rules! token_kinds {
         ];
 
         #[allow(dead_code)]
-        pub(crate) const KEYWORDS: [&str; 4] = [
-            "rules",
-            "commands",
-            "reverse",
-            "eval"
+        pub(crate) const KEYWORDS: [&str; crate::count!($($keyword_val)+)] = [
+            $($keyword_val),+
         ];
 
         impl<T: Iterator<Item = char>> Iterator for Lexer<T> {
@@ -312,7 +314,7 @@ macro_rules! token_kinds {
 
             fn next(&mut self) -> Option<Token> {
                 if self.exhausted {
-                    return None;
+                    None
                 } else {
                     Some(self.next_token())
                 }
@@ -556,6 +558,7 @@ macro_rules! token_kinds {
 
                             let token = match text.as_str() {
                                 $($($val => Token::new($kind, text, loc),)?)+
+                                $($keyword_val => Token::new($keyword, text, loc),)+
                                 $($op_val => Token::new(Op(OpKind::$op_kind), text, loc),)+
                                 $($cmd_val => Token::new(Command(CommandKind::$cmd_kind), text, loc),)+
                                 $($($strat_val => Token::new(Strategy(StrategyKind::$strat_kind), text, loc),)?)+

@@ -212,8 +212,14 @@ impl Runtime {
                             write!(writer, "{}", style.apply(", ")).inherit(loc.clone())?;
                         }
                     }
-                    if *repeat == Repeat::ZeroOrMore {
-                        write!(writer, "{}", style.apply(", .. ")).inherit(loc.clone())?;
+                    if let Repeat::ZeroOrMore(sep) = repeat {
+                        write!(
+                            writer,
+                            "{}{}",
+                            sep.clone().map(|x| x.to_string()).unwrap_or("".to_owned()),
+                            "..",
+                        )
+                        .inherit(loc.clone())?;
                     }
                     write!(writer, "{}", style.apply(")")).inherit(loc.clone())?;
                     Ok(())
@@ -233,8 +239,14 @@ impl Runtime {
                             write!(writer, "{}", ", ").inherit(loc.clone())?;
                         }
                     }
-                    if *repeat == Repeat::ZeroOrMore {
-                        write!(writer, "{}", ", .. ").inherit(loc.clone())?;
+                    if let Repeat::ZeroOrMore(sep) = repeat {
+                        write!(
+                            writer,
+                            "{}{}",
+                            sep.clone().map(|x| x.to_string()).unwrap_or("".to_owned()),
+                            "..",
+                        )
+                        .inherit(loc.clone())?;
                     }
                     write!(writer, "{}", ")").inherit(loc.clone())?;
                     Ok(())

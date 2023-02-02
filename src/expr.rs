@@ -3,9 +3,9 @@ use std::fmt::Display;
 use thiserror::Error;
 
 use crate::{
-    err, err_hl,
+    err,
     error::{common::*, ParseError::*},
-    lexer::{Constraint, Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE},
+    lexer::{Constraint, Lexer, OpKind, Token, TokenKind, MAX_PRECEDENCE},
     rule::{Action, State, Strategy},
 };
 
@@ -20,10 +20,10 @@ pub(crate) enum Expr {
     List(Vec<Expr>, Repeat),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Repeat {
     None,
-    ZeroOrMore,
+    ZeroOrMore(Option<OpKind /* Separator */>),
 }
 
 #[derive(Debug, Error)]
@@ -77,7 +77,7 @@ impl Expr {
                             halt_elements = arg_halt;
                         }
                     }
-                    (List(new_elements, *repeat), false)
+                    (List(new_elements, repeat.clone()), false)
                 }
             }
         }
@@ -140,36 +140,42 @@ impl Expr {
             .unwrap_or(Expr::Sym(name.to_owned()))
     }
 
-    fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<(Vec<Self>, Repeat)> {
-        use TokenKind::*;
-        if lexer.next_if(|tok| tok.kind == OpenParen).is_none() {
-            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
-                .with_message("Expected '('");
+    fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Expr> {
+        if lexer
+            .next_if(|tok| tok.kind == TokenKind::CloseParen)
+            .is_some()
+        {
+            return Ok(Expr::List(vec![], Repeat::None));
         }
 
-        let mut elements = Vec::new();
+        let mut result = vec![Self::parse(lexer)?]; // Vec with first element
         let mut repeat = Repeat::None;
-
-        if lexer.next_if(|tok| tok.kind == CloseParen).is_some() {
-            return Ok((elements, repeat));
-        }
-
-        elements.push(Self::parse(lexer)?);
-        while lexer.next_if(|tok| tok.kind == Comma).is_some() {
-            if lexer.next_if(|tok| tok.kind == DoubleDot).is_some() {
-                repeat = Repeat::ZeroOrMore;
+        while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
+            if lexer.next_if(|t| t.kind == TokenKind::DoubleDot).is_some() {
+                repeat = Repeat::ZeroOrMore(None);
                 break;
+            } else if let TokenKind::Op(op) = lexer.peek().clone().kind {
+                if let TokenKind::DoubleDot = &lexer.peek_next().kind {
+                    lexer.catchup();
+                    repeat = Repeat::ZeroOrMore(Some(op));
+                    break;
+                } else {
+                    result.push(Self::parse(lexer)?);
+                }
             } else {
-                elements.push(Self::parse(lexer)?);
+                result.push(Self::parse(lexer)?);
             }
         }
 
-        if lexer.next_if(|tok| tok.kind == CloseParen).is_none() {
+        if lexer
+            .next_if(|tok| tok.kind == TokenKind::CloseParen)
+            .is_none()
+        {
             let t = lexer.next_token();
             return err!(Parse UnexpectedToken(t.text), t.loc).with_message("Expected ')'");
         }
 
-        Ok((elements, repeat))
+        Ok(Expr::List(result, repeat))
     }
 
     fn parse_fn_or_var_or_sym(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
@@ -178,37 +184,7 @@ impl Expr {
                 Token {
                     kind: TokenKind::OpenParen,
                     ..
-                } => {
-                    let result = Self::parse(lexer)?;
-                    if lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
-                        let mut result = vec![result];
-                        let mut repeat = Repeat::None;
-                        if lexer.next_if(|t| t.kind == TokenKind::DoubleDot).is_some() {
-                            repeat = Repeat::ZeroOrMore;
-                        } else {
-                            result.push(Self::parse(lexer)?);
-                            while lexer.next_if(|t| t.kind == TokenKind::Comma).is_some() {
-                                if lexer.next_if(|t| t.kind == TokenKind::DoubleDot).is_some() {
-                                    repeat = Repeat::ZeroOrMore;
-                                    break;
-                                } else {
-                                    result.push(Self::parse(lexer)?);
-                                }
-                            }
-                        }
-                        if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
-                                .with_message("Expected ')'");
-                        }
-                        Expr::List(result, repeat)
-                    } else {
-                        if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
-                                .with_message("Expected ')'");
-                        }
-                        result
-                    }
-                }
+                } => Self::parse_list(lexer)?,
                 Token {
                     kind: TokenKind::Ident,
                     text,
@@ -233,13 +209,11 @@ impl Expr {
             }
         };
 
-        while let Token {
-            kind: TokenKind::OpenParen,
-            ..
-        } = lexer.peek()
+        while lexer
+            .next_if(|tok| tok.kind == TokenKind::OpenParen)
+            .is_some()
         {
-            let (body, repeat) = Self::parse_list(lexer)?;
-            head = Expr::Fun(box head, box Expr::List(body, repeat));
+            head = Expr::Fun(box head, box Self::parse_list(lexer)?);
         }
         Ok(head)
     }
@@ -290,8 +264,12 @@ impl Display for Expr {
                     }
                     write!(f, "{}", expr)?;
                 }
-                if repeat == &Repeat::ZeroOrMore {
-                    write!(f, ", ..")?;
+                if let Repeat::ZeroOrMore(sep) = repeat {
+                    write!(
+                        f,
+                        ", {}..",
+                        sep.clone().map(|x| x.to_string()).unwrap_or("".to_owned())
+                    )?;
                 }
                 write!(f, ")")
             }
@@ -310,8 +288,12 @@ impl Display for Expr {
                             }
                             write!(f, "{}", expr)?;
                         }
-                        if repeat == &Repeat::ZeroOrMore {
-                            write!(f, ", ..")?;
+                        if let Repeat::ZeroOrMore(sep) = repeat {
+                            write!(
+                                f,
+                                ", {}..",
+                                sep.clone().map(|x| x.to_string()).unwrap_or("".to_owned())
+                            )?;
                         }
                     }
                     other => write!(f, "{}", other)?,

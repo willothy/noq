@@ -73,7 +73,7 @@ impl Rule {
                             halt_elements = arg_halt;
                         }
                     }
-                    (List(new_elements, *repeat), false)
+                    (List(new_elements, repeat.clone()), false)
                 }
             }
         }

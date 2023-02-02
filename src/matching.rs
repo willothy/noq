@@ -65,15 +65,14 @@ pub(crate) fn substitute_bindings(
                         .iter()
                         .map(|el| substitute_bindings(bindings, el, in_repeat, repeat_exhausted))
                         .collect(),
-                    *repeat,
+                    repeat.clone(),
                 ),
-                Repeat::ZeroOrMore => {
+                Repeat::ZeroOrMore(None) => {
                     let mut new_elements = Vec::new();
                     let mut repeat_bindings = bindings.clone();
                     let mut depth = 0;
                     let mut exhausted = false;
                     while !exhausted {
-                        println!("repeat_bindings: {:?}", repeat_bindings);
                         for element in elements {
                             new_elements.push(substitute_bindings(
                                 &mut repeat_bindings,
@@ -82,24 +81,42 @@ pub(crate) fn substitute_bindings(
                                 &mut exhausted,
                             ));
                         }
-                        let contents =
-                            std::fs::read_to_string(std::path::PathBuf::from("test.txt"))
-                                .unwrap_or(String::new());
-                        std::fs::write(
-                            std::path::PathBuf::from("test.txt"),
-                            format!(
-                                "{}\nDepth: {}\nBindings: {:#?}\nNew Elements: {:#?}\n----------------------------------",
-                                contents, depth, bindings, new_elements
-                            ),
-                        )
-                        .unwrap();
                         depth += 1;
                         if depth > 15 {
                             panic!("Infinite loop detected");
                         }
                     }
 
-                    Expr::List(new_elements, *repeat)
+                    Expr::List(new_elements, repeat.clone())
+                }
+                Repeat::ZeroOrMore(Some(op)) => {
+                    let mut new_elements = VecDeque::new();
+                    let mut repeat_bindings = bindings.clone();
+                    let mut depth = 0;
+                    let mut exhausted = false;
+                    while !exhausted {
+                        for element in elements {
+                            new_elements.push_back(substitute_bindings(
+                                &mut repeat_bindings,
+                                element,
+                                true,
+                                &mut exhausted,
+                            ));
+                        }
+                        depth += 1;
+                        if depth > 15 {
+                            panic!("Infinite loop detected");
+                        }
+                    }
+
+                    while new_elements.len() > 1 {
+                        let combined = new_elements.pop_front().unwrap();
+                        let second = new_elements.pop_front().unwrap();
+                        let new = Expr::Op(op.clone(), box combined, box second);
+                        new_elements.push_front(new);
+                    }
+
+                    new_elements.pop_front().unwrap()
                 }
             }
         }
@@ -185,7 +202,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                             .iter()
                             .zip(val_elements.iter())
                             .all(|(pat, val)| match_impl(pat, val, bindings, in_repeat)),
-                        Repeat::ZeroOrMore => {
+                        Repeat::ZeroOrMore(_) => {
                             if val_len % pat_len != 0 {
                                 false
                             } else {
