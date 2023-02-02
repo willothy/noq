@@ -3,7 +3,6 @@ use std::{
     io::{stdout, Write},
 };
 
-use anyhow::Result;
 use crossterm::{
     cursor::{self, MoveDown, MoveTo, MoveToColumn, MoveUp, Show},
     event::{read, Event, KeyCode, KeyEvent},
@@ -15,11 +14,12 @@ use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use crate::{
-    lexer::{self, Lexer, StrategyKind, STRATEGIES},
-    runtime::{InteractionResult, Runtime, RuntimeError, StepResult, Verbosity},
+    error::Error,
+    lexer::{self, Lexer},
+    runtime::{InteractionResult, Runtime, StepResult, Verbosity},
 };
 
-pub struct Repl {
+pub(crate) struct Repl {
     prompt: Vec<String>,
     input_buf: String,
     result_lines_buf: Vec<String>,
@@ -36,11 +36,11 @@ struct ReplError(String);
 
 static mut INPUT: String = String::new();
 
-pub trait Highlight {
+pub(crate) trait Highlight {
     fn highlight(&self) -> StyledContent<String>;
 }
 
-pub enum HighlightKind {
+pub(crate) enum HighlightKind {
     Command,
     Comment,
     Path,
@@ -153,7 +153,7 @@ impl Highlight for String {
 }
 
 impl Repl {
-    pub fn run() {
+    pub(crate) fn run() {
         let mut repl = Repl {
             prompt: std::env::var("NOQ")
                 .map(|v| v.replace("\\[", ""))
@@ -504,7 +504,7 @@ impl Repl {
         disable_raw_mode().unwrap();
     }
 
-    pub fn handle_input(&mut self, str: String) -> Result<StepResult, RuntimeError> {
+    pub(crate) fn handle_input(&mut self, str: String) -> Result<StepResult, Error> {
         unsafe {
             INPUT = str;
         }

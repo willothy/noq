@@ -1,11 +1,12 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
-use anyhow::{bail, Result};
 use thiserror::Error;
 
 use crate::{
+    err, err_hl,
+    error::{common::*, ParseError::*},
     lexer::{Constraint, Lexer, OpKind, StringUnwrap, Token, TokenKind, MAX_PRECEDENCE},
-    rule::{pattern_match, Action, Bindings, State, Strategy},
+    rule::{Action, State, Strategy},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,14 +22,14 @@ pub(crate) enum Expr {
 
 #[derive(Debug, Error)]
 #[error("Parse error: {0}")]
-pub struct ParseError(String);
+pub(crate) struct ParseError(String);
 
 impl Expr {
-    pub fn is_num(&self) -> bool {
+    pub(crate) fn is_num(&self) -> bool {
         matches!(self, Expr::Num(_))
     }
 
-    pub fn is_const_expr(&self) -> bool {
+    pub(crate) fn is_const_expr(&self) -> bool {
         use Expr::*;
         match self {
             Num(_) => true,
@@ -37,7 +38,7 @@ impl Expr {
         }
     }
 
-    pub fn eval(&self, strategy: &mut impl Strategy) -> Expr {
+    pub(crate) fn eval(&self, strategy: &mut impl Strategy) -> Expr {
         fn eval_subexprs(expr: &Expr, strategy: &mut impl Strategy) -> (Expr, bool) {
             use Expr::*;
             match expr {
@@ -125,26 +126,19 @@ impl Expr {
         eval_impl(self, strategy).0
     }
 
-    fn var_or_sym(name: &str, constraint: Constraint) -> Result<Expr> {
-        if name.is_empty() {
-            bail!("Empty symbol name")
-        }
-        Ok(name
-            .chars()
+    fn var_or_sym(name: &str, constraint: Constraint) -> Expr {
+        name.chars()
             .nth(0)
             .filter(|c| c.is_uppercase() || *c == '_')
             .map(|_| Expr::Var(name.to_owned(), constraint))
-            .unwrap_or(Expr::Sym(name.to_owned())))
+            .unwrap_or(Expr::Sym(name.to_owned()))
     }
 
     fn parse_list(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Self>> {
         use TokenKind::*;
         if lexer.next_if(|tok| tok.kind == OpenParen).is_none() {
-            return Err(ParseError(format!(
-                "Expected '(', got {}",
-                lexer.next().unwrap_string()
-            ))
-            .into());
+            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
+                .with_message("Expected '('");
         }
         let mut args = Vec::new();
         if lexer.next_if(|tok| tok.kind == CloseParen).is_some() {
@@ -155,11 +149,8 @@ impl Expr {
             args.push(Self::parse(lexer)?);
         }
         if lexer.next_if(|tok| tok.kind == CloseParen).is_none() {
-            return Err(ParseError(format!(
-                "Expected ')', got {}",
-                lexer.next().unwrap_string()
-            ))
-            .into());
+            let t = lexer.next_token();
+            return err!(Parse UnexpectedToken(t.text), t.loc).with_message("Expected ')'");
         }
         Ok(args)
     }
@@ -179,20 +170,14 @@ impl Expr {
                             println!("peek: {:?}", lexer.peek());
                         }
                         if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                            return Err(ParseError(format!(
-                                "Expected ')', got {}",
-                                lexer.next().unwrap_string()
-                            ))
-                            .into());
+                            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
+                                .with_message("Expected ')'");
                         }
                         Expr::List(result)
                     } else {
                         if lexer.next_if(|t| t.kind == TokenKind::CloseParen).is_none() {
-                            return Err(ParseError(format!(
-                                "Expected ')', got {}",
-                                lexer.next().unwrap_string()
-                            ))
-                            .into());
+                            return err!(Parse UnexpectedToken(err_hl!(lexer.next().unwrap_string())), lexer.next_token().loc)
+                                .with_message("Expected ')'");
                         }
                         result
                     }
@@ -202,23 +187,22 @@ impl Expr {
                     text,
                     constraint,
                     ..
-                } => Self::var_or_sym(&text, constraint)?,
+                } => Self::var_or_sym(&text, constraint),
                 Token {
                     kind: TokenKind::Number,
                     text,
+                    loc,
                     ..
-                } => Expr::Num(text.parse()?),
+                } => Expr::Num(text.parse().inherit(loc)?),
                 Token {
                     kind: TokenKind::String,
                     text,
                     ..
-                } => {
-                    if text.is_empty() {
-                        return Err(ParseError("Empty string".to_owned()).into());
-                    }
-                    Expr::Str(text)
+                } => Expr::Str(text),
+                t => {
+                    return err!(Parse UnexpectedToken(t.text), t.loc)
+                        .with_message("Expected symbol")
                 }
-                t => return Err(ParseError(format!("Expected symbol, found {}", t)).into()),
             }
         };
 
@@ -237,8 +221,7 @@ impl Expr {
         precedence: usize,
     ) -> Result<Self> {
         if precedence > MAX_PRECEDENCE {
-            let res = Self::parse_fn_or_var_or_sym(lexer);
-            return res;
+            return Self::parse_fn_or_var_or_sym(lexer);
         }
 
         let mut result = Self::parse_binop(lexer, precedence + 1)?;
@@ -256,13 +239,13 @@ impl Expr {
         Ok(result)
     }
 
-    pub fn parse(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
+    pub(crate) fn parse(lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self> {
         Self::parse_binop(lexer, 0)
     }
 }
 
 impl TryFrom<&str> for Expr {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(s: &str) -> Result<Self> {
         Expr::parse(&mut crate::lexer::Lexer::new(s.chars().peekable()))
     }

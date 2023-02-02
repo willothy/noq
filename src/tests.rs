@@ -1,15 +1,15 @@
 #![cfg(test)]
 use std::collections::HashMap;
 
-use crate::{rule::*, *};
+use crate::{expr::Expr, matching::pattern_match, rule::*};
 
 #[test]
 fn rule_apply_all() {
-    let swap = Rule::try_from("swap(pair(A, B)) = pair(B, A)").unwrap();
+    let swap = Rule::try_from("swap((A, B)) = (B, A)").unwrap();
 
-    let input = Expr::try_from("foo(swap(pair(f(a), g(b))), swap(pair(q(c), z(d))))").unwrap();
+    let input = Expr::try_from("foo(swap((f(a), g(b))), swap((q(c), z(d))))").unwrap();
 
-    let expected = Expr::try_from("foo(pair(g(b), f(a)), pair(z(d), q(c)))").unwrap();
+    let expected = Expr::try_from("foo((g(b), f(a)), (z(d), q(c)))").unwrap();
 
     let actual = swap.apply(&input, &mut ApplyAll);
 

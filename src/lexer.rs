@@ -54,15 +54,15 @@ crate::token_kinds! {
 }
 
 #[derive(Debug, Clone)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub text: String,
-    pub loc: Loc,
-    pub constraint: Constraint,
+pub(crate) struct Token {
+    pub(crate) kind: TokenKind,
+    pub(crate) text: String,
+    pub(crate) loc: Loc,
+    pub(crate) constraint: Constraint,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Constraint {
+pub(crate) enum Constraint {
     Sym,
     Num,
     Str,
@@ -86,7 +86,7 @@ impl Display for Token {
     }
 }
 
-pub trait StringUnwrap {
+pub(crate) trait StringUnwrap {
     fn unwrap_string(self) -> String;
 }
 
@@ -103,11 +103,11 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Loc {
-    pub file: Option<String>,
-    pub line: usize,
-    pub col: usize,
-    pub offset: usize,
+pub(crate) struct Loc {
+    pub(crate) file: Option<String>,
+    pub(crate) line: usize,
+    pub(crate) col: usize,
+    pub(crate) offset: usize,
 }
 
 impl Default for Loc {
@@ -132,7 +132,7 @@ impl std::fmt::Display for Loc {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, text: String, loc: Loc) -> Self {
+    pub(crate) fn new(kind: TokenKind, text: String, loc: Loc) -> Self {
         Self {
             kind,
             text,
@@ -141,7 +141,7 @@ impl Token {
         }
     }
 
-    pub fn ident(text: String, loc: Loc, constraint: Constraint) -> Self {
+    pub(crate) fn ident(text: String, loc: Loc, constraint: Constraint) -> Self {
         Self {
             kind: TokenKind::Ident,
             text,
@@ -151,15 +151,15 @@ impl Token {
     }
 }
 
-pub struct Lexer<T: Iterator<Item = char>> {
-    pub chars: Peekable<T>,
-    pub peeked: VecDeque<Token>,
+pub(crate) struct Lexer<T: Iterator<Item = char>> {
+    pub(crate) chars: Peekable<T>,
+    pub(crate) peeked: VecDeque<Token>,
     prev: Option<Token>,
-    pub exhausted: bool,
-    pub file_name: Option<String>,
-    pub current_line: usize,
-    pub current_col: usize,
-    pub current_offset: usize,
+    pub(crate) exhausted: bool,
+    pub(crate) file_name: Option<String>,
+    pub(crate) current_line: usize,
+    pub(crate) current_col: usize,
+    pub(crate) current_offset: usize,
 }
 
 impl<'a> From<&'a str> for Lexer<Chars<'a>> {
@@ -168,7 +168,7 @@ impl<'a> From<&'a str> for Lexer<Chars<'a>> {
     }
 }
 
-pub trait IsNumeric {
+pub(crate) trait IsNumeric {
     fn is_numeric(&self) -> bool;
 }
 
@@ -225,7 +225,7 @@ macro_rules! token_kinds {
         $($strat_kind:ident $(= $strat_val:literal)?),+$(,)?
     ) => {
         #[derive(Debug, PartialEq, Clone)]
-        pub enum TokenKind {
+        pub(crate) enum TokenKind {
             $($kind),+,
             Op(OpKind),
             Command(CommandKind),
@@ -233,16 +233,16 @@ macro_rules! token_kinds {
         }
 
         #[derive(Debug, PartialEq, Clone)]
-        pub enum OpKind {
+        pub(crate) enum OpKind {
             $($op_kind),+
         }
 
         #[allow(dead_code)]
-        pub const MAX_PRECEDENCE: usize = $max_prec;
+        pub(crate) const MAX_PRECEDENCE: usize = $max_prec;
 
         impl OpKind {
             #[allow(dead_code)]
-            pub fn precedence(&self) -> usize {
+            pub(crate) fn precedence(&self) -> usize {
                 use OpKind::*;
                 match self {
                     $($op_kind => $op_prec),+
@@ -260,7 +260,7 @@ macro_rules! token_kinds {
         }
 
         #[derive(Debug, PartialEq, Clone)]
-        pub enum CommandKind {
+        pub(crate) enum CommandKind {
             $($cmd_kind),+
         }
 
@@ -274,33 +274,33 @@ macro_rules! token_kinds {
         }
 
         #[derive(Debug, PartialEq, Clone)]
-        pub enum StrategyKind {
+        pub(crate) enum StrategyKind {
             $($strat_kind),+
         }
 
         #[allow(dead_code)]
-        pub const COMMANDS: [&str; crate::count!($($cmd_val)+)] = [
+        pub(crate) const COMMANDS: [&str; crate::count!($($cmd_val)+)] = [
             $(
                 casey::lower!($cmd_val)
             ),+
         ];
 
         #[allow(dead_code)]
-        pub const BINOPS: [&str; crate::count!($($op_val)+)] = [
+        pub(crate) const BINOPS: [&str; crate::count!($($op_val)+)] = [
             $(
                 casey::lower!($op_val)
             ),+
         ];
 
         #[allow(dead_code)]
-        pub const STRATEGIES: [&str; crate::count!($($strat_kind)+)] = [
+        pub(crate) const STRATEGIES: [&str; crate::count!($($strat_kind)+)] = [
             $(
                 casey::lower!(stringify!($strat_kind))
             ),+
         ];
 
         #[allow(dead_code)]
-        pub const KEYWORDS: [&str; 4] = [
+        pub(crate) const KEYWORDS: [&str; 4] = [
             "rules",
             "commands",
             "reverse",
@@ -321,7 +321,7 @@ macro_rules! token_kinds {
 
 
         impl<T: Iterator<Item = char>> Lexer<T> {
-            pub fn new(chars: Peekable<T>) -> Self {
+            pub(crate) fn new(chars: Peekable<T>) -> Self {
                 Self {
                     chars,
                     peeked: VecDeque::new(),
@@ -334,7 +334,7 @@ macro_rules! token_kinds {
                 }
             }
 
-            pub fn current_loc(&self) -> Loc {
+            pub(crate) fn current_loc(&self) -> Loc {
                 Loc {
                     line: self.current_line,
                     col: self.current_col,
@@ -343,28 +343,28 @@ macro_rules! token_kinds {
                 }
             }
 
-            pub fn with_file_name(mut self, file_name: String) -> Self {
+            pub(crate) fn with_file_name(mut self, file_name: String) -> Self {
                 self.file_name = Some(file_name);
                 self
             }
 
-            pub fn peek(&mut self) -> &Token {
+            pub(crate) fn peek(&mut self) -> &Token {
                 let tok = self.next_token();
                 self.peeked.push_front(tok);
                 self.peeked.front().unwrap()
             }
 
-            pub fn peek_next(&mut self) -> &Token {
+            pub(crate) fn peek_next(&mut self) -> &Token {
                 let tok = self.next_token_impl();
                 self.peeked.push_front(tok);
                 self.peeked.front().unwrap()
             }
 
-            pub fn catchup(&mut self) {
+            pub(crate) fn catchup(&mut self) {
                 self.peeked.clear();
             }
 
-            pub fn next_token(&mut self) -> Token {
+            pub(crate) fn next_token(&mut self) -> Token {
                 if let Some(token) = self.peeked.pop_back() {
                     token
                 } else {
@@ -372,7 +372,7 @@ macro_rules! token_kinds {
                 }
             }
 
-            pub fn next_if<F: Fn(&Token) -> bool>(&mut self, pred: F) -> Option<Token> {
+            pub(crate) fn next_if<F: Fn(&Token) -> bool>(&mut self, pred: F) -> Option<Token> {
                 let token = self.peek();
                 if pred(&token) {
                     Some(self.next_token())
