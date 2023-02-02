@@ -1,0 +1,4147 @@
+
+Depth: 0
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 2
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 3
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 4
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 5
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 6
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 7
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 8
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 9
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 10
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 11
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 12
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 13
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 14
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 15
+Bindings: {
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 2
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 3
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 4
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 5
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 6
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 7
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 8
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 9
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 10
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 11
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 12
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 13
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 14
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 15
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+    Var(
+        "A",
+        None,
+    ),
+    Var(
+        "C",
+        None,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "C": Var(
+        Num(
+            3,
+        ),
+    ),
+    "A": Var(
+        Num(
+            1,
+        ),
+    ),
+    "D": Var(
+        Num(
+            4,
+        ),
+    ),
+    "B": Var(
+        Num(
+            2,
+        ),
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "C": List(
+        [
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+        ],
+    ),
+    "D": List(
+        [
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "C": List(
+        [
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+        ],
+    ),
+    "D": List(
+        [
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+        ],
+    ),
+    "D": List(
+        [
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+        ],
+    ),
+    "C": List(
+        [
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+        ],
+    ),
+    "D": List(
+        [
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+        ],
+    ),
+    "C": List(
+        [
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+    Num(
+        4,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+    Num(
+        4,
+    ),
+    Var(
+        "D",
+        None,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        1,
+    ),
+    Num(
+        4,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        1,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "B": List(
+        [
+            Num(
+                2,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                3,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        2,
+    ),
+    Num(
+        1,
+    ),
+    Num(
+        4,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "B": List(
+        [
+            Num(
+                3,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                2,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "B": List(
+        [
+            Num(
+                3,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                2,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------
+Depth: 0
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                2,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                3,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+]
+----------------------------------
+Depth: 1
+Bindings: {
+    "A": List(
+        [
+            Num(
+                1,
+            ),
+            Num(
+                2,
+            ),
+        ],
+    ),
+    "B": List(
+        [
+            Num(
+                3,
+            ),
+            Num(
+                4,
+            ),
+        ],
+    ),
+}
+New Elements: [
+    Num(
+        1,
+    ),
+    Num(
+        3,
+    ),
+    Num(
+        2,
+    ),
+    Num(
+        4,
+    ),
+]
+----------------------------------

@@ -32,10 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Panicked with no message at {}", location);
             }
             #[cfg(debug_assertions)]
-            println!(
-                "Backtrace: {:#?}",
-                std::backtrace::Backtrace::force_capture()
-            );
+            println!("Backtrace:\n{}", std::backtrace::Backtrace::force_capture());
         }
     }));
 

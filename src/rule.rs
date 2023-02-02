@@ -82,13 +82,15 @@ impl Rule {
             if let Some(mut bindings) = pattern_match(&rule.head, expr) {
                 let resolution = strategy.matched();
                 let new_expr = match resolution.action {
-                    Action::Apply => substitute_bindings(&mut bindings, &rule.body, false),
+                    Action::Apply => {
+                        substitute_bindings(&mut bindings, &rule.body, false, &mut false)
+                    }
                     Action::Skip => expr.clone(),
                     Action::Check => {
                         if let Some(matches) = strategy.matches() {
                             matches.push((
                                 expr.clone(),
-                                substitute_bindings(&mut bindings, &rule.body, false),
+                                substitute_bindings(&mut bindings, &rule.body, false, &mut false),
                             ));
                         }
                         expr.clone()

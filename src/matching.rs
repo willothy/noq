@@ -5,7 +5,12 @@ use crate::{
     lexer::Constraint,
 };
 
-pub(crate) fn substitute_bindings(bindings: &mut Bindings, expr: &Expr, in_repeat: bool) -> Expr {
+pub(crate) fn substitute_bindings(
+    bindings: &mut Bindings,
+    expr: &Expr,
+    in_repeat: bool,
+    repeat_exhausted: &mut bool,
+) -> Expr {
     match expr {
         Expr::Sym(_) => expr.clone(),
         Expr::Num(_) => expr.clone(),
@@ -15,6 +20,7 @@ pub(crate) fn substitute_bindings(bindings: &mut Bindings, expr: &Expr, in_repea
                 match binding {
                     Binding::Var(var) => {
                         if in_repeat {
+                            *repeat_exhausted = true;
                             match bindings.remove(name).unwrap() {
                                 Binding::Var(var) => var,
                                 _ => unreachable!(),
@@ -29,23 +35,27 @@ pub(crate) fn substitute_bindings(bindings: &mut Bindings, expr: &Expr, in_repea
                         }
                         let res = list.pop_front().unwrap();
                         if list.is_empty() {
+                            *repeat_exhausted = true;
                             bindings.remove(name);
                         }
                         res
                     }
                 }
             } else {
+                /* if in_repeat {
+                    *repeat_exhausted = true;
+                } */
                 expr.clone()
             }
         }
         Expr::Op(op, l, r) => Expr::Op(
             op.clone(),
-            box substitute_bindings(bindings, l, in_repeat),
-            box substitute_bindings(bindings, r, in_repeat),
+            box substitute_bindings(bindings, l, in_repeat, repeat_exhausted),
+            box substitute_bindings(bindings, r, in_repeat, repeat_exhausted),
         ),
         Expr::Fun(head, body) => Expr::Fun(
-            box substitute_bindings(bindings, head, in_repeat),
-            box substitute_bindings(bindings, body, in_repeat),
+            box substitute_bindings(bindings, head, in_repeat, repeat_exhausted),
+            box substitute_bindings(bindings, body, in_repeat, repeat_exhausted),
         ),
         Expr::List(elements, repeat) => {
             // no resize
@@ -53,20 +63,39 @@ pub(crate) fn substitute_bindings(bindings: &mut Bindings, expr: &Expr, in_repea
                 Repeat::None => Expr::List(
                     elements
                         .iter()
-                        .map(|el| substitute_bindings(bindings, el, in_repeat))
+                        .map(|el| substitute_bindings(bindings, el, in_repeat, repeat_exhausted))
                         .collect(),
                     *repeat,
                 ),
                 Repeat::ZeroOrMore => {
                     let mut new_elements = Vec::new();
                     let mut repeat_bindings = bindings.clone();
-                    while !repeat_bindings.is_empty() {
+                    let mut depth = 0;
+                    let mut exhausted = false;
+                    while !exhausted {
+                        println!("repeat_bindings: {:?}", repeat_bindings);
                         for element in elements {
                             new_elements.push(substitute_bindings(
                                 &mut repeat_bindings,
                                 element,
                                 true,
+                                &mut exhausted,
                             ));
+                        }
+                        let contents =
+                            std::fs::read_to_string(std::path::PathBuf::from("test.txt"))
+                                .unwrap_or(String::new());
+                        std::fs::write(
+                            std::path::PathBuf::from("test.txt"),
+                            format!(
+                                "{}\nDepth: {}\nBindings: {:#?}\nNew Elements: {:#?}\n----------------------------------",
+                                contents, depth, bindings, new_elements
+                            ),
+                        )
+                        .unwrap();
+                        depth += 1;
+                        if depth > 15 {
+                            panic!("Infinite loop detected");
                         }
                     }
 
@@ -137,12 +166,12 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
             }
             (Op(opl, l1, r1), Op(opr, l2, r2)) => {
                 opl == opr
-                    && match_impl(l1, l2, bindings, false)
-                    && match_impl(r1, r2, bindings, false)
+                    && match_impl(l1, l2, bindings, in_repeat)
+                    && match_impl(r1, r2, bindings, in_repeat)
             }
             (Fun(pat_name, pat_body), Expr::Fun(val_name, val_body)) => {
-                match_impl(pat_name, val_name, bindings, false)
-                    && match_impl(pat_body, val_body, bindings, false)
+                match_impl(pat_name, val_name, bindings, in_repeat)
+                    && match_impl(pat_body, val_body, bindings, in_repeat)
             }
             (List(pat_elements, pat_repeat), List(val_elements, _)) => {
                 let pat_len = pat_elements.len();
@@ -155,7 +184,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                         Repeat::None => pat_elements
                             .iter()
                             .zip(val_elements.iter())
-                            .all(|(pat, val)| match_impl(pat, val, bindings, false)),
+                            .all(|(pat, val)| match_impl(pat, val, bindings, in_repeat)),
                         Repeat::ZeroOrMore => {
                             if val_len % pat_len != 0 {
                                 false
