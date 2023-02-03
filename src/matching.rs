@@ -20,14 +20,14 @@ pub(crate) fn substitute_bindings(
                 match binding {
                     Binding::Var(var) => {
                         if in_repeat {
-                            *repeat_exhausted = true;
-                            match bindings.remove(name).unwrap() {
+                            //*repeat_exhausted = true;
+                            /* match bindings.remove(name).unwrap() {
                                 Binding::Var(var) => var,
                                 _ => unreachable!(),
-                            }
+                            } */
                         } else {
-                            var.clone()
                         }
+                        var.clone()
                     }
                     Binding::List(list) => {
                         if list.is_empty() {
@@ -36,7 +36,7 @@ pub(crate) fn substitute_bindings(
                         let res = list.pop_front().unwrap();
                         if list.is_empty() {
                             *repeat_exhausted = true;
-                            bindings.remove(name);
+                            //bindings.remove(name);
                         }
                         res
                     }
@@ -82,7 +82,7 @@ pub(crate) fn substitute_bindings(
                             ));
                         }
                         depth += 1;
-                        if depth > 15 {
+                        if depth > 100 {
                             panic!("Infinite loop detected");
                         }
                     }
@@ -91,20 +91,20 @@ pub(crate) fn substitute_bindings(
                 }
                 Repeat::ZeroOrMore(Some(op)) => {
                     let mut new_elements = VecDeque::new();
-                    let mut repeat_bindings = bindings.clone();
+                    //let mut repeat_bindings = bindings.clone();
                     let mut depth = 0;
                     let mut exhausted = false;
                     while !exhausted {
                         for element in elements {
                             new_elements.push_back(substitute_bindings(
-                                &mut repeat_bindings,
+                                bindings,
                                 element,
                                 true,
                                 &mut exhausted,
                             ));
                         }
                         depth += 1;
-                        if depth > 15 {
+                        if depth > 100 {
                             panic!("Infinite loop detected");
                         }
                     }

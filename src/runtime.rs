@@ -574,7 +574,7 @@ impl Runtime {
             SaveType::All => {
                 for (name, rule) in self.rules.iter() {
                     writer
-                        .write_fmt(format_args!("{} :: {}\n", name, rule))
+                        .write_fmt(format_args!("\n{} :: {}", name, rule))
                         .inherit(loc.clone())?;
                     writer.flush().inherit(loc.clone())?;
                 }
@@ -589,7 +589,7 @@ impl Runtime {
             SaveType::Rules => {
                 for (name, rule) in self.rules.iter() {
                     writer
-                        .write_fmt(format_args!("{} :: {}\n", name, rule))
+                        .write_fmt(format_args!("\n{} :: {}", name, rule))
                         .inherit(loc.clone())?;
                     writer.flush().inherit(loc.clone())?;
                 }

@@ -10,6 +10,9 @@
     - [X] Repeating expressions in lists
     - [X] List conversion to binary op with separators
     - [ ] Retrieving iteration index with `@`
+- [X] Variable type constraints
+    - [X] `#` for number, `%` for string, `$` for symbol, `!` for function, `[]` for list
+    - [X] Use in rules to constrain the variable type they match
 - [X] Constant expression folding / evaluation
     - [X] `eval` intrinsic
     - [ ] Evaluate list exprs (dot product, vec add, etc)
@@ -19,7 +22,7 @@
 
 ## Examples:
 
-### Basic Expressions: 
+### `Basic Expressions`: 
     Number: Unsigned integers only (for now)
     String: Text enclosed in double quotes - escapes not yet supported
     Symbol: identifier starting with a lowercase letter or underscore, matched literally
@@ -29,7 +32,7 @@
     "Hello, world!" => String
     foo => Symbol
 
-#### List Expressions:
+### `List Expressions`:
     (1, 2, 3, 4)
 
     Repeating patterns:
@@ -41,18 +44,51 @@
     Vector Add:
     (1, 2, 3) + (4, 5, 6) => List + List
 
-#### Function Expressions:
+### `Function Expressions`:
     f(X, Y) => Function(Var, Var)
     f(X, Y)(G, (H, I)) => Function(Var, Var)(Var, List)
 
-### Rules:<br>
+### `Rules`:
+#### Definition:
 <code>name &#58;&#58; pattern &#61; replacement</code><br>
+Add single number to vector:
+<code>vec_add_one &#58;&#58; (A, ..) + N = (A + 1, ..)</code>
+<code>(1, 2, 3) + 5 => (1 + 5, 2 + 5, 3 + 5)</code><br>
 Vector add:
-<code>vec_add &#58;&#58; &#40;A, ..) + (B, ..) = (A<sub>n</sub> + B~n~, ..)</code><br>
+<code>vec_add &#58;&#58; &#40;A, ..) + (B, ..) = (A + B, ..)</code><br>
 Vector dot product:
     <code>dot &#58;&#58; (A, ..) * (B, ..) = (A * B, +..)</code>
-    <code style="margin-left: 22px;">=> (A<sub>0</sub> * B<sub>0</sub>) + (A<sub>1</sub> * B<sub>1</sub>) + (A<sub>2</sub> * B<sub>2</sub>) + ...</code>
+    <code style="margin-left: 22px;">=> (A0 * B0) + (A1 * B1) + (A2 * B2) + ...</code>
 </code>
+
+#### Application:
+<code>rule | strategy</code><br>
+<code>dot | 0</code> applies the vector dot product rule to its first match in current shape
+<code>vec_add | all</code> applies the vec_add rule to all matches in current shape
+
+#### Checking:
+Using the intrinsic `check` strategy, you can print all matches for a given rule. You use check the same way as a rule application strategy:
+<code>dot | check</code> checks for matches of the dot rule in the current shape
+<code>vec_add | check </code> checks for matches of the vec_add rule in the current shape
+
+### `Variable Constraints`:
+    X# => Number
+    X% => String
+    X$ => Symbol
+    X! => Function
+    X[] => List
+
+    Add single number to vector (with type constraints):
+    vec_add_one :: (A#, ..) + N# = (A + 1, ..)
+
+### `Constant Folding`:
+    eval | <strategy>
+
+    eval is an intrinsic which matches and evaluates constant expressions.
+
+    // example uses:
+    eval | 0
+    eval | check
 
 [//]: # (Colon: &#58; Open, close paren: &#40;, &#41;)
 [//]: # (equals: &#61;)
