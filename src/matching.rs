@@ -48,10 +48,14 @@ pub(crate) fn substitute_bindings(
                 expr.clone()
             }
         }
-        Expr::Op(op, l, r) => Expr::Op(
+        Expr::BinaryOp(op, l, r) => Expr::BinaryOp(
             op.clone(),
             box substitute_bindings(bindings, l, in_repeat, repeat_exhausted),
             box substitute_bindings(bindings, r, in_repeat, repeat_exhausted),
+        ),
+        Expr::UnaryOp(op, e) => Expr::UnaryOp(
+            op.clone(),
+            box substitute_bindings(bindings, e, in_repeat, repeat_exhausted),
         ),
         Expr::Fun(head, body) => Expr::Fun(
             box substitute_bindings(bindings, head, in_repeat, repeat_exhausted),
@@ -112,7 +116,7 @@ pub(crate) fn substitute_bindings(
                     while new_elements.len() > 1 {
                         let combined = new_elements.pop_front().unwrap();
                         let second = new_elements.pop_front().unwrap();
-                        let new = Expr::Op(op.clone(), box combined, box second);
+                        let new = Expr::BinaryOp(op.clone(), box combined, box second);
                         new_elements.push_front(new);
                     }
 
@@ -181,7 +185,7 @@ pub(crate) fn pattern_match(pattern: &Expr, value: &Expr) -> Option<Bindings> {
                     matches_constraint
                 }
             }
-            (Op(opl, l1, r1), Op(opr, l2, r2)) => {
+            (BinaryOp(opl, l1, r1), BinaryOp(opr, l2, r2)) => {
                 opl == opr
                     && match_impl(l1, l2, bindings, in_repeat)
                     && match_impl(r1, r2, bindings, in_repeat)
@@ -253,7 +257,7 @@ pub(crate) fn collect_subexprs<'a>(pattern: &'a Expr, expr: &'a Expr) -> Vec<&'a
                     match_all_inner(pattern, element, subexprs);
                 }
             }
-            Expr::Op(_, lhs, rhs) => {
+            Expr::BinaryOp(_, lhs, rhs) => {
                 match_all_inner(pattern, lhs, subexprs);
                 match_all_inner(pattern, rhs, subexprs);
             }
@@ -284,7 +288,7 @@ pub(crate) fn collect_sub_constexprs<'a>(expr: &'a Expr) -> Vec<&'a Expr> {
                     inner(element, subexprs);
                 }
             }
-            Expr::Op(_, lhs, rhs) => {
+            Expr::BinaryOp(_, lhs, rhs) => {
                 inner(lhs, subexprs);
                 inner(rhs, subexprs);
             }

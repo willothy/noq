@@ -10,6 +10,9 @@
     - [X] Repeating expressions in lists
     - [X] List conversion to binary op with separators
     - [ ] Retrieving iteration index with `@`
+- [X] Unary expression
+    - [X] `+` and `-` unary operators
+    - [X] `+` and `-` unary operators with list conversion
 - [X] Variable type constraints
     - [X] `#` for number, `%` for string, `$` for symbol, `!` for function, `[]` for list
     - [X] Use in rules to constrain the variable type they match
@@ -22,8 +25,8 @@
 
 ## Examples:
 
-### `Basic Expressions`: 
-    Number: Unsigned integers only (for now)
+### `Basic Expressions`:
+    Number: Positive and negative values allowed
     String: Text enclosed in double quotes - escapes not yet supported
     Symbol: identifier starting with a lowercase letter or underscore, matched literally
     Variable: identifier starting with an uppercase letter, bound to a value when matching

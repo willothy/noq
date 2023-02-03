@@ -16,7 +16,8 @@ pub(crate) enum Expr {
     Num(i64),
     Str(String),
     Fun(Box<Expr>, Box<Expr>),
-    Op(OpKind, Box<Expr>, Box<Expr>),
+    BinaryOp(OpKind, Box<Expr>, Box<Expr>),
+    UnaryOp(OpKind, Box<Expr>),
     List(Vec<Expr>, Repeat),
 }
 
@@ -39,7 +40,8 @@ impl Expr {
         use Expr::*;
         match self {
             Num(_) => true,
-            Op(op, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr() && op.is_const(),
+            BinaryOp(op, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr() && op.is_const(),
+            UnaryOp(op, expr) => expr.is_const_expr() && op.is_const() && op.is_unary(),
             _ => false,
         }
     }
@@ -57,13 +59,13 @@ impl Expr {
                     let (new_body, halt) = eval_impl(body, strategy);
                     (Fun(box new_head, box new_body), halt)
                 }
-                Op(op, lhs, rhs) => {
+                BinaryOp(op, lhs, rhs) => {
                     let (new_lhs, halt) = eval_impl(lhs, strategy);
                     if halt {
-                        return (Op(op.clone(), box new_lhs, rhs.clone()), true);
+                        return (BinaryOp(op.clone(), box new_lhs, rhs.clone()), true);
                     }
                     let (new_rhs, halt) = eval_impl(rhs, strategy);
-                    (Op(op.clone(), box new_lhs, box new_rhs), halt)
+                    (BinaryOp(op.clone(), box new_lhs, box new_rhs), halt)
                 }
                 List(elements, repeat) => {
                     let mut new_elements = vec![];
@@ -79,12 +81,16 @@ impl Expr {
                     }
                     (List(new_elements, repeat.clone()), false)
                 }
+                UnaryOp(op, expr) => {
+                    let (new_expr, halt) = eval_impl(expr, strategy);
+                    (UnaryOp(op.clone(), box new_expr), halt)
+                }
             }
         }
 
         fn apply_eval(expr: &Expr) -> Expr {
             match expr {
-                Expr::Op(op, lhs, rhs) => {
+                Expr::BinaryOp(op, lhs, rhs) => {
                     let lhs = match apply_eval(lhs.as_ref()) {
                         Expr::Num(n) => n,
                         _ => unreachable!(),
@@ -203,6 +209,10 @@ impl Expr {
                     text,
                     ..
                 } => Expr::Str(text),
+                Token {
+                    kind: TokenKind::Op(op),
+                    ..
+                } => Expr::UnaryOp(op, box Expr::parse(lexer)?),
                 t => {
                     return err!(Parse UnexpectedToken(t.text), t.loc)
                         .with_message("Expected symbol")
@@ -236,7 +246,7 @@ impl Expr {
             _ => false,
         }) {
             let rhs = Self::parse_binop(lexer, precedence)?;
-            result = Expr::Op(op, box result, box rhs);
+            result = Expr::BinaryOp(op, box result, box rhs);
         }
 
         Ok(result)
@@ -301,9 +311,29 @@ impl Display for Expr {
                 }
                 write!(f, ")")
             }
-            Expr::Op(op, lhs, rhs) => {
+            Expr::UnaryOp(op, expr) => {
+                write!(f, "{}", op)?;
+                match expr.as_ref() {
+                    Expr::BinaryOp(sub_op, _, _) => {
+                        if sub_op.precedence() <= op.precedence() {
+                            write!(f, "({})", expr)
+                        } else {
+                            write!(f, "{}", expr)
+                        }
+                    }
+                    Expr::UnaryOp(op, _) => {
+                        if op.precedence() <= op.precedence() {
+                            write!(f, "({})", expr)
+                        } else {
+                            write!(f, "{}", expr)
+                        }
+                    }
+                    _ => write!(f, "{}", expr),
+                }
+            }
+            Expr::BinaryOp(op, lhs, rhs) => {
                 match lhs.as_ref() {
-                    Expr::Op(sub_op, _, _) => {
+                    Expr::BinaryOp(sub_op, _, _) => {
                         if sub_op.precedence() <= op.precedence() {
                             write!(f, "({})", lhs)?
                         } else {
@@ -318,7 +348,7 @@ impl Display for Expr {
                     write!(f, "{}", op)?;
                 }
                 match rhs.as_ref() {
-                    Expr::Op(sub_op, _, _) => {
+                    Expr::BinaryOp(sub_op, _, _) => {
                         if sub_op.precedence() <= op.precedence() {
                             write!(f, "({})", rhs)
                         } else {

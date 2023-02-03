@@ -17,7 +17,6 @@ use crate::{
 use crossterm::{
     event::Event,
     style::{Color, ContentStyle, Stylize},
-    terminal::disable_raw_mode,
 };
 use linked_hash_map::LinkedHashMap;
 
@@ -295,7 +294,7 @@ impl Runtime {
                 }
                 Ok(())
             }
-            Expr::Op(op, lhs, rhs) => {
+            Expr::BinaryOp(op, lhs, rhs) => {
                 if highlight {
                     write!(writer, "{}", style.apply("(")).inherit(loc.clone())?;
                     Self::write_subexpr_highlighted(
@@ -375,6 +374,37 @@ impl Runtime {
                     write!(writer, "\"{}\"", str).inherit(loc)?;
                 }
                 Ok(())
+            }
+            Expr::UnaryOp(op, e) => {
+                if highlight {
+                    write!(writer, "{}", style.apply("(")).inherit(loc.clone())?;
+                    write!(writer, "{}", style.apply(op)).inherit(loc.clone())?;
+                    Self::write_subexpr_highlighted(
+                        e,
+                        subexprs,
+                        idx,
+                        style,
+                        highlight,
+                        loc.clone(),
+                        writer,
+                    )?;
+                    write!(writer, "{}", style.apply(")")).inherit(loc.clone())?;
+                    Ok(())
+                } else {
+                    write!(writer, "(").inherit(loc.clone())?;
+                    write!(writer, "{}", op).inherit(loc.clone())?;
+                    Self::write_subexpr_highlighted(
+                        e,
+                        subexprs,
+                        idx,
+                        style,
+                        highlight,
+                        loc.clone(),
+                        writer,
+                    )?;
+                    write!(writer, ")").inherit(loc.clone())?;
+                    Ok(())
+                }
             }
         }
     }

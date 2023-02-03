@@ -261,6 +261,13 @@ macro_rules! token_kinds {
                     _ => false
                 }
             }
+
+            pub(crate) fn is_unary(&self) -> bool {
+                match self {
+                    OpKind::Sub => true,
+                    _ => false
+                }
+            }
         }
 
         impl std::fmt::Display for OpKind {

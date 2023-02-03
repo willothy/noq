@@ -45,13 +45,17 @@ impl Rule {
             use Expr::*;
             match expr {
                 Num(_) | Str(_) | Sym(_) | Var(_, _) => (expr.clone(), false),
-                Op(op, lhs, rhs) => {
+                BinaryOp(op, lhs, rhs) => {
                     let (new_lhs, halt) = apply_impl(rule, lhs, strategy);
                     if halt {
-                        return (Op(op.clone(), box new_lhs, rhs.clone()), true);
+                        return (BinaryOp(op.clone(), box new_lhs, rhs.clone()), true);
                     }
                     let (new_rhs, halt) = apply_impl(rule, rhs, strategy);
-                    (Op(op.clone(), box new_lhs, box new_rhs), halt)
+                    (BinaryOp(op.clone(), box new_lhs, box new_rhs), halt)
+                }
+                UnaryOp(op, arg) => {
+                    let (new_arg, halt) = apply_impl(rule, arg, strategy);
+                    (UnaryOp(op.clone(), box new_arg), halt)
                 }
                 Fun(head, body) => {
                     let (new_head, halt) = apply_impl(rule, head, strategy);
