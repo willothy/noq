@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::VecDeque, fmt::Display};
 
 use thiserror::Error;
 
@@ -42,6 +42,7 @@ impl Expr {
             Num(_) => true,
             BinaryOp(op, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr() && op.is_const(),
             UnaryOp(op, expr) => expr.is_const_expr() && op.is_const() && op.is_unary(),
+            List(elements, _) => elements.iter().all(|e| e.is_const_expr()),
             _ => false,
         }
     }
@@ -89,27 +90,92 @@ impl Expr {
         }
 
         fn apply_eval(expr: &Expr) -> Expr {
+            use Expr::*;
             match expr {
-                Expr::BinaryOp(op, lhs, rhs) => {
-                    let lhs = match apply_eval(lhs.as_ref()) {
-                        Expr::Num(n) => n,
-                        _ => unreachable!(),
-                    };
-                    let rhs = match apply_eval(rhs.as_ref()) {
-                        Expr::Num(n) => n,
-                        _ => unreachable!(),
-                    };
-                    match op {
-                        OpKind::Add => Expr::Num(lhs + rhs),
-                        OpKind::Sub => Expr::Num(lhs - rhs),
-                        OpKind::Mul => Expr::Num(lhs * rhs),
-                        OpKind::Div => Expr::Num(lhs / rhs),
-                        OpKind::Pow => Expr::Num(lhs.pow(rhs as u32)),
-                        OpKind::Dot => unreachable!(),
+                /* List(elements, repeat) => List(
+                    elements.iter().map(|el| apply_eval(el)).collect(),
+                    repeat.clone(),
+                ), */
+                BinaryOp(op, lhs, rhs) => {
+                    let lhs = apply_eval(lhs.as_ref());
+                    let rhs = apply_eval(rhs.as_ref());
+                    match (lhs, rhs) {
+                        (Num(lhs), Num(rhs)) => match op {
+                            OpKind::Add => Num(lhs + rhs),
+                            OpKind::Sub => Num(lhs - rhs),
+                            OpKind::Mul => Num(lhs * rhs),
+                            OpKind::Div => Num(lhs / rhs),
+                            OpKind::Pow => Num(lhs.pow(rhs as u32)),
+                            OpKind::Dot => unreachable!(),
+                        },
+                        (List(lhs, _), List(rhs, _)) => match op {
+                            OpKind::Add => List(
+                                lhs.iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Add, box l.clone(), box r.clone())
+                                    })
+                                    .collect(),
+                                Repeat::None,
+                            ),
+                            OpKind::Sub => List(
+                                lhs.iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Sub, box l.clone(), box r.clone())
+                                    })
+                                    .collect(),
+                                Repeat::None,
+                            ),
+                            OpKind::Mul => List(
+                                lhs.iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Mul, box l.clone(), box r.clone())
+                                    })
+                                    .collect(),
+                                Repeat::None,
+                            ),
+                            OpKind::Div => List(
+                                lhs.iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Div, box l.clone(), box r.clone())
+                                    })
+                                    .collect(),
+                                Repeat::None,
+                            ),
+                            OpKind::Pow => List(
+                                lhs.iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Pow, box l.clone(), box r.clone())
+                                    })
+                                    .collect(),
+                                Repeat::None,
+                            ),
+                            OpKind::Dot => {
+                                let mut new_elements: VecDeque<Expr> = lhs
+                                    .iter()
+                                    .zip(rhs)
+                                    .map(|(l, r)| {
+                                        BinaryOp(OpKind::Mul, box l.clone(), box r.clone())
+                                    })
+                                    .collect();
+
+                                let mut result_expr = new_elements.pop_front().unwrap();
+                                while let Some(next) = new_elements.pop_front() {
+                                    result_expr = BinaryOp(OpKind::Add, box result_expr, box next);
+                                }
+
+                                result_expr
+                            }
+                        },
+                        (lhs, rhs) => BinaryOp(op.clone(), box lhs, box rhs),
                     }
                 }
-                Expr::Num(_) => expr.clone(),
-                _ => unreachable!(),
+                Num(_) => expr.clone(),
+                other => other.clone(),
             }
         }
 

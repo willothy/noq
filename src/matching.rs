@@ -261,6 +261,7 @@ pub(crate) fn collect_subexprs<'a>(pattern: &'a Expr, expr: &'a Expr) -> Vec<&'a
                 match_all_inner(pattern, lhs, subexprs);
                 match_all_inner(pattern, rhs, subexprs);
             }
+            Expr::UnaryOp(_, expr) => match_all_inner(pattern, expr, subexprs),
             _ => {}
         }
     }
@@ -274,7 +275,7 @@ pub(crate) fn collect_sub_constexprs<'a>(expr: &'a Expr) -> Vec<&'a Expr> {
     let mut subexprs = vec![];
 
     fn inner<'a>(expr: &'a Expr, subexprs: &mut Vec<&'a Expr>) {
-        if expr.is_const_expr() && !expr.is_num() {
+        if expr.is_const_expr() && !expr.is_num() && !matches!(expr, Expr::List(_, _)) {
             subexprs.push(expr);
         }
 

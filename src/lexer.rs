@@ -257,7 +257,7 @@ macro_rules! token_kinds {
 
             pub(crate) fn is_const(&self) -> bool {
                 match self {
-                    OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow => true,
+                    OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow | OpKind::Dot => true,
                     _ => false
                 }
             }
