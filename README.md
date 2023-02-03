@@ -9,9 +9,9 @@
     - [X] Basic list usage
     - [X] Repeating expressions in lists
     - [X] List conversion to binary op with separators
-    - [&nbsp;&nbsp;] Retrieving iteration index with `@`
+    - [ ] Retrieving iteration index with `@`
 - [X] Constant expression folding / evaluation
     - [X] `eval` intrinsic
-    - [&nbsp;&nbsp;] Evaluate list exprs (dot product, vec add, etc)
-- [&nbsp;&nbsp;] LaTeX or other rendered math expr output (maybe)
-- [&nbsp;&nbsp;] Neovim integration (WIP)
+    - [ ] Evaluate list exprs (dot product, vec add, etc)
+- [ ] LaTeX or other rendered math expr output (maybe)
+- [ ] Neovim integration (WIP)
