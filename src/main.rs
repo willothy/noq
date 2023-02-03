@@ -39,8 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(file) = args().nth(1) {
         let path = PathBuf::from(file);
         let source = std::fs::read_to_string(&path).unwrap();
-        let mut lexer = Lexer::new(source.chars().peekable())
-            .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
+        let mut lexer = Lexer::new(source.chars().peekable()).with_file(
+            path.file_name().unwrap().to_str().unwrap().to_string(),
+            path,
+        );
 
         let mut runtime = Runtime::new();
         runtime.verbosity = Verbosity::Normal;

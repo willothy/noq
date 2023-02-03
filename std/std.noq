@@ -1,12 +1,9 @@
-s1 :: 1 = s(0)
-s2 :: 2 = s(1)
-s3 :: 3 = s(2)
-s4 :: 4 = s(3)
+use misc.noq
+use vec.noq
+
 sum_id :: 0 + A = A
 sum_comm :: A + B = B + A
-sum :: s(A) + B = s(A + B)
 sub_id :: A - 0 = A
-sub :: s(A) - s(B) = A - B
 diff_id :: A - A = 0
 mul_sum_dist :: A*(B + C) = A*B + A*C
 mul_assoc :: A*(B*C) = (A*B)*C

@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, iter::Peekable, str::Chars};
+use std::{collections::VecDeque, fmt::Display, iter::Peekable, path::PathBuf, str::Chars};
 
 crate::token_kinds! {
     Ident,
@@ -13,8 +13,7 @@ crate::token_kinds! {
     DoubleColon = "::",
     OpenParen = "(",
     CloseParen = ")",
-    Dot,
-    DoubleDot,
+    DoubleDot = "..",
     Comma = ",",
     Equals = "=",
     Semicolon = ";",
@@ -34,6 +33,7 @@ crate::token_kinds! {
     Mul = "*" 1,
     Div = "/" 1,
     Pow = "^" 2,
+    Dot = "." 2,
     -commands-
     Done = "done",
     Undo = "undo",
@@ -159,6 +159,7 @@ pub(crate) struct Lexer<T: Iterator<Item = char>> {
     prev: Option<Token>,
     pub(crate) exhausted: bool,
     pub(crate) file_name: Option<String>,
+    pub(crate) file_path: Option<PathBuf>,
     pub(crate) current_line: usize,
     pub(crate) current_col: usize,
     pub(crate) current_offset: usize,
@@ -188,7 +189,7 @@ macro_rules! count {
 
 #[macro_export]
 macro_rules! ignore {
-    ($keep:ident, $rest:tt) => {
+    ($keep:path, $rest:tt) => {
         $keep
     };
 }
@@ -251,6 +252,13 @@ macro_rules! token_kinds {
                 use OpKind::*;
                 match self {
                     $($op_kind => $op_prec),+
+                }
+            }
+
+            pub(crate) fn is_const(&self) -> bool {
+                match self {
+                    OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow => true,
+                    _ => false
                 }
             }
         }
@@ -330,6 +338,7 @@ macro_rules! token_kinds {
                     prev: None,
                     exhausted: false,
                     file_name: None,
+                    file_path: None,
                     current_line: 1,
                     current_col: 1,
                     current_offset: 0
@@ -345,8 +354,9 @@ macro_rules! token_kinds {
                 }
             }
 
-            pub(crate) fn with_file_name(mut self, file_name: String) -> Self {
+            pub(crate) fn with_file(mut self, file_name: String, path: PathBuf) -> Self {
                 self.file_name = Some(file_name);
+                self.file_path = Some(path);
                 self
             }
 
@@ -420,6 +430,20 @@ macro_rules! token_kinds {
                             self.prev = Some(Token::new(Op(OpKind::Div), text.clone(), loc.clone()));
                             Token::new(Op(OpKind::Div), text, loc)
                         }
+                        "." => {
+                            if self.chars.next_if(|x| *x == '.').is_some() {
+                                self.current_offset += 1;
+                                self.current_col += 1;
+                                text.push('.');
+                                let tok = Token::new(DoubleDot, text, loc);
+                                self.prev = Some(tok.clone());
+                                return tok;
+                            } else {
+                                let tok = Token::new(Op(OpKind::Dot), text, loc);
+                                self.prev = Some(tok.clone());
+                                return tok;
+                            }
+                        }
                         $(#[allow(unreachable_patterns)]
                         $op_val => {
                             self.prev = Some(Token::new(Op(OpKind::$op_kind), text.clone(), loc.clone()));
@@ -459,20 +483,6 @@ macro_rules! token_kinds {
                                         }
                                         self.prev = Some(Token::new(Path, text[1..text.len()].to_string(), loc.clone()));
                                         return Token::new(Path, text[1..text.len()].to_string(), loc);
-                                    }
-                                    '.' => {
-                                        if self.chars.next_if(|x| *x == '.').is_some() {
-                                            self.current_offset += 1;
-                                            self.current_col += 1;
-                                            text.push('.');
-                                            let tok = Token::new(DoubleDot, text, loc);
-                                            self.prev = Some(tok.clone());
-                                            return tok;
-                                        } else {
-                                            let tok = Token::new(Dot, text, loc);
-                                            self.prev = Some(tok.clone());
-                                            return tok;
-                                        }
                                     }
                                     ':' => {
                                         if let Some(c) = self.chars.next_if(|x| *x == ':') {

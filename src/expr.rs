@@ -39,7 +39,7 @@ impl Expr {
         use Expr::*;
         match self {
             Num(_) => true,
-            Op(_, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr(),
+            Op(op, lhs, rhs) => lhs.is_const_expr() && rhs.is_const_expr() && op.is_const(),
             _ => false,
         }
     }
@@ -99,6 +99,7 @@ impl Expr {
                         OpKind::Mul => Expr::Num(lhs * rhs),
                         OpKind::Div => Expr::Num(lhs / rhs),
                         OpKind::Pow => Expr::Num(lhs.pow(rhs as u32)),
+                        OpKind::Dot => unreachable!(),
                     }
                 }
                 Expr::Num(_) => expr.clone(),

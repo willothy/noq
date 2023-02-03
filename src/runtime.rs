@@ -17,6 +17,7 @@ use crate::{
 use crossterm::{
     event::Event,
     style::{Color, ContentStyle, Stylize},
+    terminal::disable_raw_mode,
 };
 use linked_hash_map::LinkedHashMap;
 
@@ -380,7 +381,10 @@ impl Runtime {
 
     fn cmd_use(&mut self, lexer: &mut Lexer<impl Iterator<Item = char>>) -> Result<StepResult> {
         let (file_name, loc) = parse::parse_use(lexer)?;
-        let path = PathBuf::from(&file_name);
+        let mut path = PathBuf::from(&file_name);
+        if let Some(file) = &lexer.file_path {
+            path = PathBuf::from(file).parent().unwrap().join(path);
+        }
         if !path.exists() {
             return err!(Runtime IOError, loc).with_message(&*format!(
                 "{} {}",
@@ -389,17 +393,26 @@ impl Runtime {
             ));
         }
         if path.is_dir() {
-            return err!(Runtime IOError, loc).with_message(&*format!(
-                "{} {}",
-                path.to_str().unwrap(),
-                "is a directory".red().bold()
-            ));
+            let dir_name = path.file_name().unwrap().to_str().unwrap();
+            let new_path = path.join(dir_name).with_extension("noq");
+            if new_path.exists() {
+                path = new_path;
+            } else {
+                return err!(Runtime IOError, loc).with_message(&*format!(
+                    "{} {}",
+                    path.to_str().unwrap(),
+                    "is a directory and does not contain a root noq file"
+                        .red()
+                        .bold()
+                ));
+            }
         }
+
         let contents = fs::read_to_string(&path)
             .inherit(loc.clone())
             .with_prefix(&*format!("Could not read {:?}:", &path))?;
 
-        let mut lexer = lexer::Lexer::new(contents.chars().peekable());
+        let mut lexer = lexer::Lexer::new(contents.chars().peekable()).with_file(file_name, path);
         let mut res = vec![];
         let old_verbosity = self.verbosity;
         self.verbosity = Verbosity::Silent;
@@ -609,8 +622,10 @@ impl Runtime {
         let contents = fs::read_to_string(&path)
             .inherit(loc)
             .with_prefix(&format!("Cannot open {}:", err_hl!(file_name)))?;
-        let mut lexer = lexer::Lexer::new(contents.chars().peekable())
-            .with_file_name(path.file_name().unwrap().to_str().unwrap().to_string());
+        let mut lexer = lexer::Lexer::new(contents.chars().peekable()).with_file(
+            path.file_name().unwrap().to_str().unwrap().to_string(),
+            path,
+        );
         let mut res = vec![];
         while !lexer.exhausted {
             res.push(self.step(&mut lexer)?);
